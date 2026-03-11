@@ -8,7 +8,8 @@ export default {
     extend: {
       fontFamily: {
         sans: [
-          'Source Sans 3',
+          'Noto Sans',
+          'Noto Sans JP',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
