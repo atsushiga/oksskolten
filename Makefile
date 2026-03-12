@@ -1,4 +1,4 @@
-.PHONY: help dev dev-down dev-scratch prod prod-down
+.PHONY: help ci test test-server test-client typecheck lint dev dev-down dev-scratch prod prod-down
 
 COMPOSE ?= docker compose
 
@@ -10,6 +10,22 @@ export GIT_COMMIT GIT_TAG BUILD_DATE
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
+
+ci: typecheck lint test ## Run all CI checks (typecheck + lint + test)
+
+test: test-server test-client ## Run all tests
+
+test-server: ## Run server tests
+	npx vitest run --project server
+
+test-client: ## Run client tests
+	npx vitest run --project client
+
+typecheck: ## Run TypeScript type checking
+	npm run typecheck
+
+lint: ## Run ESLint
+	npm run lint
 
 dev: ## Start dev environment
 	$(COMPOSE) up

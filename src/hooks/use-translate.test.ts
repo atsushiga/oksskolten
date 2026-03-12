@@ -130,6 +130,16 @@ describe('useTranslate', () => {
     expect(metrics.report).not.toHaveBeenCalled()
   })
 
+  it('treats null full_text_translated as no translation', () => {
+    const metrics = mockMetrics()
+    // Simulates what article-detail passes when translated_lang !== locale
+    const { result } = renderHook(() =>
+      useTranslate({ id: 1, full_text_translated: null }, metrics),
+    )
+    expect(result.current.fullTextTranslated).toBeNull()
+    expect(result.current.viewMode).toBe('original')
+  })
+
   it('handles error silently and sets translating=false', async () => {
     mockStreamPost.mockRejectedValue(new Error('Network error'))
 

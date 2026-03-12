@@ -317,6 +317,28 @@ describe('translate_article', () => {
     expect(result.cached).toBe(true)
   })
 
+  it('does not cache when translated_lang differs from user language', async () => {
+    const feed = seedFeed()
+    const id = seedArticle(feed.id, { full_text: 'French text', lang: 'fr' })
+    // translated_lang='ja' but user language defaults to 'en' → stale
+    updateArticleContent(id, { full_text_translated: 'Old Japanese translation', translated_lang: 'ja' })
+
+    const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
+    // Should re-translate, not return cached
+    expect(result.cached).toBeUndefined()
+    expect(result.full_text_translated).toBe('モック翻訳テキスト')
+  })
+
+  it('does not cache when translated_lang is null', async () => {
+    const feed = seedFeed()
+    const id = seedArticle(feed.id, { full_text: 'French text', lang: 'fr' })
+    updateArticleContent(id, { full_text_translated: 'Legacy translation' })
+
+    const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
+    expect(result.cached).toBeUndefined()
+    expect(result.full_text_translated).toBe('モック翻訳テキスト')
+  })
+
   it('generates translation when not cached', async () => {
     const feed = seedFeed()
     const id = seedArticle(feed.id, { full_text: 'Artículo en español', lang: 'es' })

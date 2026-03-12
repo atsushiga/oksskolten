@@ -165,6 +165,41 @@ describe('POST /api/articles/:id/translate', () => {
     expect(res.json().cached).toBe(true)
   })
 
+  it('does not return cached translation when translated_lang differs from user language', async () => {
+    const feed = seedFeed()
+    // translated_lang='ja' but user language defaults to 'en' → stale, should re-translate
+    const artId = seedArticle(feed.id, { full_text: 'French text', lang: 'fr', full_text_translated: '古い日本語訳', translated_lang: 'ja' })
+
+    mockStreamTranslate.mockReset()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/articles/${artId}/translate`,
+      headers: json,
+      payload: {},
+    })
+
+    // Should NOT return cached — should invoke translation (non-stream returns new text)
+    expect(res.statusCode).toBe(200)
+    expect(res.json().cached).toBeUndefined()
+  })
+
+  it('does not return cached translation when translated_lang is null', async () => {
+    const feed = seedFeed()
+    // translated_lang=null (legacy data) → stale
+    const artId = seedArticle(feed.id, { full_text: 'French text', lang: 'fr', full_text_translated: '古い翻訳' })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/articles/${artId}/translate`,
+      headers: json,
+      payload: {},
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().cached).toBeUndefined()
+  })
+
   it('returns 400 when article is already in user language', async () => {
     const feed = seedFeed()
     // Default user language is 'en', so an English article should be rejected
