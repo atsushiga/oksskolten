@@ -1,24 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { useI18n } from '../../lib/i18n'
 import { highlightThemeFamilies } from '../../data/highlightThemes'
 import { articleFonts, FONT_SAMPLE_EN, FONT_SAMPLE_LOCALIZED, getSystemFontLabel } from '../../data/articleFonts'
 import { layouts, type LayoutName } from '../../data/layouts'
-import { themes as builtinThemes } from '../../data/themes'
 import { PreviewCard } from '../../components/settings/preview-card'
 import { useAppLayout } from '../../app'
 import { Separator } from '@/components/ui/separator'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PixelDreamPuff, PixelSleepyGiant } from '../../components/ui/mascot'
 import type { MascotChoice } from '../../hooks/use-mascot'
-import { parseThemeJson, themeToJson } from '../../lib/theme-json'
-import type { Theme } from '../../data/themes'
-import { toast } from 'sonner'
-import Editor from 'react-simple-code-editor'
-import hljs from 'highlight.js/lib/core'
-import jsonLang from 'highlight.js/lib/languages/json'
-
-hljs.registerLanguage('json', jsonLang)
+import { ThemeSection } from './theme-section'
 
 /** Derive preview colors from a theme's color definitions */
 function previewColorsFromTheme(colors: Record<string, string>) {
@@ -47,35 +37,10 @@ export function AppearanceTab() {
     customThemes, setCustomThemes,
   } = settings
   const { t, locale } = useI18n()
-  const [editingTheme, setEditingTheme] = useState<Theme | null>(null)
-  const [themeDialogOpen, setThemeDialogOpen] = useState(false)
-  const [deletingThemeName, setDeletingThemeName] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const currentTheme = themes.find(th => th.name === themeName) ?? themes[0]
   const previewLight = previewColorsFromTheme(currentTheme.colors.light)
   const previewDark = previewColorsFromTheme(currentTheme.colors.dark)
   const preloadLinksRef = useRef<HTMLLinkElement[]>([])
-
-  // File import: parse JSON and open dialog on error, or import directly
-  const handleFileImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') return
-      let parsed: unknown
-      try { parsed = JSON.parse(reader.result) } catch { toast.error(t('themeJson.invalidJson')); return }
-      const existingNames = new Set(customThemes.map(ct => ct.name))
-      const result = parseThemeJson(parsed, existingNames)
-      if ('error' in result) { toast.error(t(result.error.key as Parameters<typeof t>[0], result.error.params)); return }
-      if (customThemes.length >= 20) { toast.error(t('settings.themeLimit')); return }
-      setCustomThemes(prev => [...prev, result.theme])
-      setTheme(result.theme.name)
-      toast.success(t('settings.themeImported'))
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }, [customThemes, setCustomThemes, setTheme, t])
 
   const layoutLabelKeys: Record<LayoutName, Parameters<typeof t>[0]> = {
     list: 'settings.layoutList',
@@ -278,148 +243,13 @@ export function AppearanceTab() {
       <Separator />
 
       {/* Theme */}
-      <section>
-        <h2 className="text-base font-semibold text-text mb-1">{t('settings.colorTheme')}</h2>
-        <p className="text-xs text-muted mb-3">{t('settings.themeDesc')}</p>
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-          {builtinThemes.map(theme => {
-            const c = theme.colors[isDark ? 'dark' : 'light']
-            return (
-              <PreviewCard
-                key={theme.name}
-                selected={themeName === theme.name}
-                onClick={() => setTheme(theme.name)}
-                label={theme.label}
-              >
-                <div style={{ background: c['--color-bg'] }} className="w-full h-full flex">
-                  <div style={{ background: c['--color-bg-sidebar'] }} className="w-[30%] h-full p-2 space-y-1.5">
-                    <div style={{ background: c['--color-muted'] }} className="w-full h-1.5 rounded-full opacity-40" />
-                    <div style={{ background: c['--color-muted'] }} className="w-3/4 h-1.5 rounded-full opacity-40" />
-                  </div>
-                  <div className="flex-1 p-2 space-y-2">
-                    <div style={{ background: c['--color-muted'] }} className="w-full h-1.5 rounded-full opacity-30" />
-                    <div style={{ background: c['--color-muted'] }} className="w-3/4 h-1.5 rounded-full opacity-30" />
-                    <div className="flex-1" />
-                    <div style={{ background: c['--color-accent'] }} className="w-2 h-2 rounded-full" />
-                  </div>
-                </div>
-              </PreviewCard>
-            )
-          })}
-
-          {/* Custom themes in the same grid */}
-          {customThemes.length > 0 && (
-            <h3 className="col-span-full text-sm font-medium text-text mt-2">{t('settings.customThemes')}</h3>
-          )}
-          {customThemes.map(theme => {
-            const c = theme.colors[isDark ? 'dark' : 'light']
-            return (
-              <div key={theme.name} className="relative group w-full">
-                <PreviewCard
-                  selected={themeName === theme.name}
-                  onClick={() => setTheme(theme.name)}
-                  label={theme.label}
-                  className="w-full"
-                >
-                  <div style={{ background: c['--color-bg'] }} className="w-full h-full flex">
-                    <div style={{ background: c['--color-bg-sidebar'] }} className="w-[30%] h-full p-2 space-y-1.5">
-                      <div style={{ background: c['--color-muted'] }} className="w-full h-1.5 rounded-full opacity-40" />
-                      <div style={{ background: c['--color-muted'] }} className="w-3/4 h-1.5 rounded-full opacity-40" />
-                    </div>
-                    <div className="flex-1 p-2 space-y-2">
-                      <div style={{ background: c['--color-muted'] }} className="w-full h-1.5 rounded-full opacity-30" />
-                      <div style={{ background: c['--color-muted'] }} className="w-3/4 h-1.5 rounded-full opacity-30" />
-                      <div className="flex-1" />
-                      <div style={{ background: c['--color-accent'] }} className="w-2 h-2 rounded-full" />
-                    </div>
-                  </div>
-                </PreviewCard>
-                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    type="button"
-                    className="w-6 h-6 rounded-md bg-bg border border-border text-muted flex items-center justify-center hover:text-text transition-colors"
-                    title={t('settings.editTheme')}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setEditingTheme(theme)
-                      setThemeDialogOpen(true)
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="w-6 h-6 rounded-md bg-bg border border-border text-muted flex items-center justify-center hover:text-error transition-colors"
-                    title={t('settings.deleteTheme')}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setDeletingThemeName(theme.name)
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {deletingThemeName && (
-          <ConfirmDialog
-            title={t('settings.deleteTheme')}
-            message={t('settings.deleteThemeConfirm')}
-            danger
-            onConfirm={() => {
-              setCustomThemes(prev => prev.filter(ct => ct.name !== deletingThemeName))
-              if (themeName === deletingThemeName) setTheme('default')
-              if (editingTheme?.name === deletingThemeName) setEditingTheme(null)
-              toast.success(t('settings.themeDeleted'))
-              setDeletingThemeName(null)
-            }}
-            onCancel={() => setDeletingThemeName(null)}
-          />
-        )}
-
-        {/* Import buttons */}
-        <div className="mt-4 flex items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            className="hidden"
-            onChange={handleFileImport}
-          />
-          <button
-            type="button"
-            className="text-xs px-3 py-1.5 rounded-md border border-border text-text hover:bg-hover transition-colors"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {t('settings.importFromFile')}
-          </button>
-          <button
-            type="button"
-            className="text-xs px-3 py-1.5 rounded-md border border-border text-text hover:bg-hover transition-colors"
-            onClick={() => { setEditingTheme(null); setThemeDialogOpen(true) }}
-          >
-            {t('settings.importFromText')}
-          </button>
-        </div>
-
-        <ThemeJsonDialog
-          open={themeDialogOpen}
-          onOpenChange={setThemeDialogOpen}
-          customThemes={customThemes}
-          setCustomThemes={setCustomThemes}
-          setTheme={setTheme}
-          editingTheme={editingTheme}
-          setEditingTheme={setEditingTheme}
-        />
-      </section>
+      <ThemeSection
+        isDark={isDark}
+        themeName={themeName}
+        setTheme={setTheme}
+        customThemes={customThemes}
+        setCustomThemes={setCustomThemes}
+      />
 
       <Separator />
 
@@ -566,188 +396,5 @@ export function AppearanceTab() {
       </section>
 
     </>
-  )
-}
-
-const PLACEHOLDER_THEME_JSON = JSON.stringify({
-  name: 'my-theme',
-  label: 'My Theme',
-  colors: {
-    light: {
-      background: '#ffffff',
-      'background.sidebar': '#f0f0f2',
-      'background.subtle': '#f7f7f7',
-      'background.avatar': '#d8d8dc',
-      text: '#111111',
-      'text.muted': '#6b7280',
-      accent: '#2563eb',
-      'accent.text': '#ffffff',
-      error: '#dc2626',
-      border: '#e5e7eb',
-      hover: 'rgba(0, 0, 0, 0.04)',
-      overlay: 'rgba(0, 0, 0, 0.3)',
-    },
-    dark: { '...': '...' },
-  },
-}, null, 2)
-
-const PLACEHOLDER_THEME_HTML = `<span class="text-muted opacity-40">${hljs.highlight(PLACEHOLDER_THEME_JSON, { language: 'json' }).value}</span>`
-
-const SAMPLE_THEME_JSON = JSON.stringify({
-  name: 'everforest',
-  label: 'Everforest',
-  indicatorStyle: 'line',
-  colors: {
-    light: {
-      background: '#fdf6e3',
-      'background.sidebar': '#f4eed4',
-      'background.subtle': '#efebc8',
-      'background.avatar': '#e0dab8',
-      text: '#5c6a72',
-      'text.muted': '#829181',
-      accent: '#8da101',
-      'accent.text': '#fdf6e3',
-      error: '#f85552',
-      border: '#e0dab8',
-      hover: 'rgba(0, 0, 0, 0.04)',
-      overlay: 'rgba(0, 0, 0, 0.25)',
-    },
-    dark: {
-      background: '#2d353b',
-      'background.sidebar': '#272e33',
-      'background.subtle': '#343f44',
-      'background.avatar': '#475258',
-      text: '#d3c6aa',
-      'text.muted': '#859289',
-      accent: '#a7c080',
-      'accent.text': '#2d353b',
-      error: '#e67e80',
-      border: '#475258',
-      hover: 'rgba(255, 255, 255, 0.05)',
-      overlay: 'rgba(0, 0, 0, 0.5)',
-    },
-  },
-}, null, 2)
-
-function ThemeJsonDialog({
-  open,
-  onOpenChange,
-  customThemes,
-  setCustomThemes,
-  setTheme,
-  editingTheme,
-  setEditingTheme,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  customThemes: Theme[]
-  setCustomThemes: (updater: (prev: Theme[]) => Theme[]) => void
-  setTheme: (name: string) => void
-  editingTheme: Theme | null
-  setEditingTheme: (theme: Theme | null) => void
-}) {
-  const { t } = useI18n()
-  const [jsonText, setJsonText] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const isEditing = editingTheme !== null
-
-  // Populate text area when editing or reset when opening for import
-  useEffect(() => {
-    if (open) {
-      setJsonText(editingTheme ? JSON.stringify(themeToJson(editingTheme), null, 2) : '')
-      setError(null)
-    }
-  }, [open, editingTheme])
-
-  const handleClose = useCallback(() => {
-    onOpenChange(false)
-    setEditingTheme(null)
-  }, [onOpenChange, setEditingTheme])
-
-  const doSave = useCallback(() => {
-    setError(null)
-    if (!isEditing && customThemes.length >= 20) {
-      setError(t('settings.themeLimit'))
-      return
-    }
-    let parsed: unknown
-    try { parsed = JSON.parse(jsonText) } catch { setError(t('themeJson.invalidJson')); return }
-    const existingNames = new Set(
-      customThemes
-        .filter(ct => !isEditing || ct.name !== editingTheme?.name)
-        .map(ct => ct.name),
-    )
-    const result = parseThemeJson(parsed, existingNames)
-    if ('error' in result) { setError(t(result.error.key as Parameters<typeof t>[0], result.error.params)); return }
-    if (isEditing) {
-      setCustomThemes(prev => prev.map(ct => ct.name === editingTheme?.name ? result.theme : ct))
-      toast.success(t('settings.themeUpdated'))
-    } else {
-      setCustomThemes(prev => [...prev, result.theme])
-      toast.success(t('settings.themeImported'))
-    }
-    setTheme(result.theme.name)
-    handleClose()
-  }, [jsonText, customThemes, setCustomThemes, setTheme, isEditing, editingTheme, handleClose, t])
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else onOpenChange(v) }}>
-      <DialogContent className="max-w-lg" aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle>
-            {isEditing
-              ? `${t('settings.editTheme')}: ${editingTheme.label}`
-              : t('settings.importTheme')
-            }
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="w-full h-64 sm:h-96 rounded-md border border-border bg-bg-input overflow-auto">
-          <Editor
-            value={jsonText}
-            onValueChange={v => { setJsonText(v); setError(null) }}
-            highlight={code =>
-              code
-                ? hljs.highlight(code, { language: 'json' }).value
-                : PLACEHOLDER_THEME_HTML
-            }
-            padding={12}
-            className="text-xs font-mono text-text min-h-full"
-            textareaClassName="theme-json-editor-textarea"
-            style={{ minHeight: '100%' }}
-          />
-        </div>
-
-        {error && <p className="text-xs text-error">{error}</p>}
-
-        <div className="flex items-center gap-2">
-          {!isEditing && (
-            <button
-              type="button"
-              className="text-xs px-4 py-2 rounded-md border border-border text-muted hover:text-text hover:bg-hover transition-colors"
-              onClick={() => { setJsonText(SAMPLE_THEME_JSON); setError(null) }}
-            >
-              {t('settings.sampleButton')}
-            </button>
-          )}
-          <div className="flex-1" />
-          <button
-            type="button"
-            className="text-xs px-4 py-2 rounded-md border border-border text-muted hover:text-text hover:bg-hover transition-colors"
-            onClick={handleClose}
-          >
-            {t('settings.cancel')}
-          </button>
-          <button
-            type="button"
-            className="text-xs px-4 py-2 rounded-md bg-accent text-accent-text hover:opacity-90 transition-opacity disabled:opacity-50"
-            disabled={!jsonText.trim()}
-            onClick={doSave}
-          >
-            {isEditing ? t('settings.updateButton') : t('settings.importButton')}
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
   )
 }
