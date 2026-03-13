@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { Link as RouterLink } from 'react-router-dom'
 import { Maximize2, Minimize2, X } from 'lucide-react'
 import { IconButton } from '../ui/icon-button'
 import useSWR from 'swr'
 import { useChat, type ChatMessage } from '../../hooks/use-chat'
 import { fetcher } from '../../lib/fetcher'
 import { useI18n } from '../../lib/i18n'
+import { articleUrlToPath } from '../../lib/url'
 import { useEscapeKey } from '../../hooks/use-escape-key'
 import { ChatInputArea } from './chat-input-area'
 import { ChatMessages } from './chat-messages'
@@ -306,6 +308,14 @@ export function ChatPanel({ variant, chatState: externalChatState, articleId, co
             />
           )}
           {messagesContent}
+          {linkedArticle && (
+            <RouterLink
+              to={articleUrlToPath(linkedArticle.url)}
+              className="text-xs text-muted hover:text-accent transition-colors no-underline truncate block"
+            >
+              {linkedArticle.title}
+            </RouterLink>
+          )}
         </div>
       </div>
       {/* Input */}
