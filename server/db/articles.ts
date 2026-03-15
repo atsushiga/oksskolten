@@ -61,7 +61,7 @@ export function recalculateScores(): { updated: number } {
     WHERE liked_at IS NOT NULL
        OR bookmarked_at IS NOT NULL
        OR read_at IS NOT NULL
-       OR published_at >= datetime('now', '-30 days')
+       OR full_text_translated IS NOT NULL
        OR score > 0
   `).run()
   return { updated: result.changes }
