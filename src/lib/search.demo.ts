@@ -12,8 +12,9 @@ export async function searchArticles(
   q: string,
   filters: { bookmarked: boolean; liked: boolean; unread: boolean; since?: string },
   limit: number,
+  _offset: number,
   _signal?: AbortSignal,
-): Promise<{ articles: SearchResult[]; indexBuilding?: boolean }> {
+): Promise<{ articles: SearchResult[]; has_more: boolean; indexBuilding?: boolean }> {
   const data = demoStore.searchArticles({
     q,
     bookmarked: filters.bookmarked || undefined,
@@ -22,5 +23,5 @@ export async function searchArticles(
     since: filters.since,
     limit,
   })
-  return { articles: data.articles }
+  return { articles: data.articles, has_more: false }
 }

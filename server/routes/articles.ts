@@ -76,6 +76,7 @@ const SearchQuery = z.object({
   since: z.string().optional(),
   until: z.string().optional(),
   limit: coerceOptionalNumber,
+  offset: coerceOptionalNumber,
 })
 
 const ByUrlQuery = z.object({
@@ -233,6 +234,7 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
     }
 
     const limit = Math.min(Math.max(query.limit || DEFAULT_ARTICLE_LIMIT, 1), MAX_SEARCH_LIMIT)
+    const offset = Math.max(query.offset || 0, 0)
     const unread = query.unread === '1' ? true : query.unread === '0' ? false : undefined
     const liked = query.liked === '1'
     const bookmarked = query.bookmarked === '1'
@@ -248,11 +250,12 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
         bookmarked,
       })
 
-      const hits = await meiliSearch(query.q, { limit, filter })
+      const { hits, estimatedTotalHits } = await meiliSearch(query.q, { limit, offset, filter })
       const ids = hits.map((h) => h.id)
 
       const articles = getArticlesByIds(ids)
-      reply.send({ articles })
+      const hasMore = offset + hits.length < estimatedTotalHits
+      reply.send({ articles, has_more: hasMore })
     } catch (err) {
       log.error('Meilisearch query failed:', err)
       reply.send({ articles: [] })

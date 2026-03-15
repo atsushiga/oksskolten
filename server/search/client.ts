@@ -58,14 +58,18 @@ export function buildMeiliFilter(opts: {
  */
 export async function meiliSearch(
   query: string,
-  opts?: { limit?: number; filter?: string; sort?: string[] },
-): Promise<{ id: number }[]> {
+  opts?: { limit?: number; offset?: number; filter?: string; sort?: string[] },
+): Promise<{ hits: { id: number }[]; estimatedTotalHits: number }> {
   const index = getSearchClient().index(ARTICLES_INDEX)
   const result = await index.search(query, {
     limit: opts?.limit ?? 20,
+    offset: opts?.offset ?? 0,
     filter: opts?.filter,
     sort: opts?.sort,
     attributesToRetrieve: ['id'],
   })
-  return result.hits as { id: number }[]
+  return {
+    hits: result.hits as { id: number }[],
+    estimatedTotalHits: result.estimatedTotalHits ?? 0,
+  }
 }

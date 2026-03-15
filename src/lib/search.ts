@@ -12,9 +12,11 @@ export async function searchArticles(
   q: string,
   filters: { bookmarked: boolean; liked: boolean; unread: boolean; since?: string },
   limit: number,
+  offset: number,
   signal?: AbortSignal,
-): Promise<{ articles: SearchResult[]; indexBuilding?: boolean }> {
+): Promise<{ articles: SearchResult[]; has_more: boolean; indexBuilding?: boolean }> {
   const params = new URLSearchParams({ q, limit: String(limit) })
+  if (offset > 0) params.set('offset', String(offset))
   if (filters.bookmarked) params.set('bookmarked', '1')
   if (filters.liked) params.set('liked', '1')
   if (filters.unread) params.set('unread', '1')
@@ -24,9 +26,9 @@ export async function searchArticles(
     signal,
   })
   if (res.status === 503) {
-    return { articles: [], indexBuilding: true }
+    return { articles: [], has_more: false, indexBuilding: true }
   }
-  if (!res.ok) return { articles: [] }
+  if (!res.ok) return { articles: [], has_more: false }
   const data = await res.json()
-  return { articles: data.articles }
+  return { articles: data.articles, has_more: data.has_more ?? false }
 }

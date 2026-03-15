@@ -7,7 +7,7 @@ import { Dialog, DialogPortal, DialogOverlay, DialogTitle } from './dialog'
 import { fetcher } from '../../lib/fetcher'
 import { searchArticles } from '../../lib/search'
 
-/** Maximum number of search results returned from API */
+/** Maximum number of search results returned per page */
 const SEARCH_RESULTS_LIMIT = 20
 import { articleUrlToPath } from '../../lib/url'
 import { formatRelativeDate } from '../../lib/dateFormat'
@@ -40,12 +40,17 @@ export function SearchDialog({ onClose }: SearchDialogProps) {
   const [results, setResults] = useState<SearchResult[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [indexBuilding, setIndexBuilding] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [filterBookmarked, setFilterBookmarked] = useState(false)
   const [filterLiked, setFilterLiked] = useState(false)
   const [filterUnread, setFilterUnread] = useState(false)
   const [datePeriod, setDatePeriod] = useState<'today' | 'week' | 'month' | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const abortRef = useRef<AbortController>(undefined)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const loadMoreRef = useRef<() => void>(() => {})
 
   const { data: recentData } = useSWR<{ articles: SearchResult[] }>(
     '/api/articles?read=1&limit=10',
@@ -53,32 +58,7 @@ export function SearchDialog({ onClose }: SearchDialogProps) {
   )
   const recentArticles = recentData?.articles ?? []
 
-  const doSearch = useCallback(async (q: string, filters: { bookmarked: boolean; liked: boolean; unread: boolean; since?: string }) => {
-    abortRef.current?.abort()
-    if (!q.trim()) {
-      setResults([])
-      setHasSearched(false)
-      return
-    }
-    const controller = new AbortController()
-    abortRef.current = controller
-    try {
-      const data = await searchArticles(q, filters, SEARCH_RESULTS_LIMIT, controller.signal)
-      if (data.indexBuilding) {
-        setIndexBuilding(true)
-        setTimeout(() => doSearch(q, filters), 3000)
-        return
-      }
-      setIndexBuilding(false)
-      setResults(data.articles)
-      setHasSearched(true)
-    } catch {
-      // aborted or network error
-    }
-  }, [])
-
-  useEffect(() => {
-    clearTimeout(debounceRef.current)
+  const buildFilters = useCallback(() => {
     let since: string | undefined
     if (datePeriod) {
       const now = new Date()
@@ -94,14 +74,95 @@ export function SearchDialog({ onClose }: SearchDialogProps) {
         since = d.toISOString()
       }
     }
-    const filters = { bookmarked: filterBookmarked, liked: filterLiked, unread: filterUnread, since }
-    debounceRef.current = setTimeout(() => doSearch(query, filters), 300)
+    return { bookmarked: filterBookmarked, liked: filterLiked, unread: filterUnread, since }
+  }, [filterBookmarked, filterLiked, filterUnread, datePeriod])
+
+  const doSearch = useCallback(async (q: string, filters: { bookmarked: boolean; liked: boolean; unread: boolean; since?: string }, offset = 0) => {
+    if (offset === 0) {
+      abortRef.current?.abort()
+    }
+    if (!q.trim()) {
+      setResults([])
+      setHasSearched(false)
+      setHasMore(false)
+      return
+    }
+    const controller = new AbortController()
+    if (offset === 0) {
+      abortRef.current = controller
+    }
+    try {
+      const data = await searchArticles(q, filters, SEARCH_RESULTS_LIMIT, offset, controller.signal)
+      if (data.indexBuilding) {
+        setIndexBuilding(true)
+        setTimeout(() => doSearch(q, filters, 0), 3000)
+        return
+      }
+      setIndexBuilding(false)
+      if (offset === 0) {
+        setResults(data.articles)
+      } else {
+        setResults(prev => [...prev, ...data.articles])
+      }
+      setHasMore(data.has_more)
+      setHasSearched(true)
+      setIsLoadingMore(false)
+    } catch {
+      // aborted or network error
+      setIsLoadingMore(false)
+    }
+  }, [])
+
+  // Debounced search on query/filter change (always offset=0)
+  useEffect(() => {
+    clearTimeout(debounceRef.current)
+    const filters = buildFilters()
+    debounceRef.current = setTimeout(() => doSearch(query, filters, 0), 300)
     return () => clearTimeout(debounceRef.current)
-  }, [query, filterBookmarked, filterLiked, filterUnread, datePeriod, doSearch])
+  }, [query, filterBookmarked, filterLiked, filterUnread, datePeriod, doSearch, buildFilters])
 
   useEffect(() => {
     return () => abortRef.current?.abort()
   }, [])
+
+  // Load more callback
+  loadMoreRef.current = () => {
+    if (!hasMore || isLoadingMore || !query.trim()) return
+    setIsLoadingMore(true)
+    const filters = buildFilters()
+    void doSearch(query, filters, results.length)
+  }
+
+  // IntersectionObserver for sentinel
+  const sentinelCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
+    }
+    sentinelRef.current = node
+    if (!node) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMoreRef.current()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(node)
+    observerRef.current = observer
+  }, [])
+
+  // Re-trigger load if sentinel is visible after fetch completes
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return
+    const node = sentinelRef.current
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    if (rect.top < window.innerHeight + 200) {
+      loadMoreRef.current()
+    }
+  }, [results.length, hasMore, isLoadingMore])
 
   function handleSelect(article: SearchResult) {
     onClose()
@@ -139,7 +200,7 @@ export function SearchDialog({ onClose }: SearchDialogProps) {
               />
               {query && (
                 <button
-                  onClick={() => { setQuery(''); setResults([]); setHasSearched(false) }}
+                  onClick={() => { setQuery(''); setResults([]); setHasSearched(false); setHasMore(false) }}
                   className="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 text-muted hover:text-text transition-colors"
                 >
                   <X size={14} strokeWidth={1.5} />
@@ -238,6 +299,11 @@ export function SearchDialog({ onClose }: SearchDialogProps) {
                   </CommandItem>
                 ))}
               </CommandGroup>
+            )}
+            {hasMore && (
+              <div ref={sentinelCallbackRef} className="py-3 text-center">
+                {isLoadingMore && <span className="text-xs text-muted">...</span>}
+              </div>
             )}
           </CommandList>
 

@@ -86,7 +86,7 @@ const searchArticlesTool: ToolDef = {
       const filter = buildMeiliFilter({ feed_id, category_id, since, until, unread, liked, bookmarked })
       const meiliSort = sort ? [`${sort}:desc`] : undefined
 
-      const hits = await meiliSearch(query, { limit, filter, sort: meiliSort })
+      const { hits } = await meiliSearch(query, { limit, filter, sort: meiliSort })
       const ids = hits.map((h) => h.id)
       results = getArticlesByIds(ids)
     } else {
@@ -498,7 +498,7 @@ const getSimilarArticlesTool: ToolDef = {
     }
 
     try {
-      const hits = await meiliSearch(queryText, { limit: limit + 1 })
+      const { hits } = await meiliSearch(queryText, { limit: limit + 1 })
       // Exclude the source article itself
       const ids = hits.map((h) => h.id).filter((id) => id !== articleId).slice(0, limit)
       const results = getArticlesByIds(ids)
