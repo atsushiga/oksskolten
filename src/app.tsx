@@ -44,7 +44,15 @@ function AppLayout() {
   useSwipeDrawer(sidebarOpen, setSidebarOpen)
 
   const { data: profile } = useSWR<{ language: string | null }>('/api/settings/profile', fetcher)
+
+  // Query parameter ?lang=ja|en takes highest priority (useful for demo sharing links)
+  const langFromUrl = useMemo(() => {
+    const p = new URLSearchParams(window.location.search).get('lang')
+    return p === 'ja' || p === 'en' ? p : null
+  }, [])
+
   const [locale, setLocaleState] = useState<Locale>(() => {
+    if (langFromUrl) return langFromUrl
     const cached = localStorage.getItem('locale')
     if (cached === 'ja' || cached === 'en') return cached
     return navigator.language.startsWith('ja') ? 'ja' : 'en'
@@ -56,10 +64,15 @@ function AppLayout() {
   }, [])
 
   useEffect(() => {
+    // When ?lang= is present, persist it and skip profile override
+    if (langFromUrl) {
+      localStorage.setItem('locale', langFromUrl)
+      return
+    }
     if (profile?.language === 'ja' || profile?.language === 'en') {
       setLocale(profile.language)
     }
-  }, [profile, setLocale])
+  }, [profile, setLocale, langFromUrl])
 
   const localeCtx = useMemo(() => ({ locale, setLocale }), [locale, setLocale])
 
