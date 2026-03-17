@@ -19,7 +19,7 @@ interface ApiTokenCreated extends ApiToken {
 }
 
 export function ApiTokenSettings() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [creating, setCreating] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -90,7 +90,7 @@ export function ApiTokenSettings() {
 
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'Z')
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
   if (!tokens) return null

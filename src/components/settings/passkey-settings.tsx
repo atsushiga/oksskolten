@@ -22,7 +22,7 @@ interface PasskeyItem {
 }
 
 export function PasskeySettings() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [registering, setRegistering] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -120,7 +120,7 @@ export function PasskeySettings() {
 
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'Z')
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
   return (
