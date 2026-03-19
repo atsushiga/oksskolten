@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useAppLayout } from '../../app'
 import { MD_BREAKPOINT } from '../../lib/breakpoints'
+import { KeyboardNavigationProvider } from '../../contexts/keyboard-navigation-context'
 import { FeedList } from '../feed/feed-list'
 import { Header } from './header'
 
@@ -39,7 +40,7 @@ export function PageLayout({ mode = 'list', feedName, onBack, detailTitle, feedL
   }, [])
 
   return (
-    <>
+    <KeyboardNavigationProvider>
       <FeedList
         isOpen={drawerOpen}
         onClose={() => { if (window.innerWidth < MD_BREAKPOINT) setDrawerOpen(false) }}
@@ -56,6 +57,6 @@ export function PageLayout({ mode = 'list', feedName, onBack, detailTitle, feedL
         <div ref={sentinelRef} className="h-0" />
         {children}
       </div>
-    </>
+    </KeyboardNavigationProvider>
   )
 }

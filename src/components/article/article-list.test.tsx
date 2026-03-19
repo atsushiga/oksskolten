@@ -42,6 +42,7 @@ vi.mock('../feed/feed-metrics-bar', () => ({
 
 vi.mock('../../lib/fetcher', () => ({
   fetcher: vi.fn(),
+  apiPatch: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('../../lib/markSeenWithQueue', () => ({
@@ -73,6 +74,14 @@ vi.mock('../../contexts/fetch-progress-context', () => ({
   }),
 }))
 
+const noopSetFocusedItemId = () => {}
+vi.mock('../../contexts/keyboard-navigation-context', () => ({
+  useKeyboardNavigationContext: () => ({
+    focusedItemId: null,
+    setFocusedItemId: noopSetFocusedItemId,
+  }),
+}))
+
 vi.mock('../ui/mascot', () => ({
   Mascot: () => <div data-testid="mascot" />,
 }))
@@ -91,6 +100,12 @@ vi.mock('./article-card', () => ({
 
 vi.mock('./article-overlay', () => ({
   ArticleOverlay: () => null,
+}))
+
+vi.mock('./article-detail', () => ({
+  ArticleDetail: ({ articleUrl }: { articleUrl: string }) => (
+    <div data-testid="article-detail-preview">{articleUrl}</div>
+  ),
 }))
 
 vi.mock('../feed/feed-error-banner', () => ({

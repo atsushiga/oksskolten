@@ -16,6 +16,7 @@ export function ArticleOverlay({ articleUrl, onClose }: ArticleOverlayProps) {
         <DialogPrimitive.Content
           className="fixed inset-y-0 right-0 z-[70] w-full md:w-2/3 bg-bg shadow-2xl overflow-y-auto overscroll-contain data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right duration-300"
           aria-describedby={undefined}
+          data-keyboard-nav-passthrough=""
         >
           <DialogTitle className="sr-only">Article</DialogTitle>
           {/* Close button */}
