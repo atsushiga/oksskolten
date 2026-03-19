@@ -179,3 +179,19 @@ jobs:
           name: Client Coverage
           json-summary-path: coverage/client/coverage-summary.json
           json-summary-compare-path: ${{ steps.check-base.outputs.exists == 'true' && 'coverage/client-base/coverage-summary.json' || '' }}
+
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [check, server-test, client-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          results=("${{ needs.check.result }}" "${{ needs.server-test.result }}" "${{ needs.client-test.result }}")
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" && "$r" != "skipped" ]]; then
+              echo "Job failed with result: $r"
+              exit 1
+            fi
+          done
