@@ -67,7 +67,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const bookmarkedOnly = isBookmarks
   const likedOnly = isLikes
   const readOnly = isHistory
-  const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode } = settings
+  const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode, keyboardNavigation } = settings
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null)
   const [noFloor, setNoFloor] = useState(false)
   const displayConfig: ArticleDisplayConfig = useMemo(() => ({
@@ -120,7 +120,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   // Keyboard navigation
   // ---------------------------------------------------------------------------
   const { focusedItemId, setFocusedItemId } = useKeyboardNavigationContext()
-  const isKeyboardNavEnabled = !isGridLayout
+  const isKeyboardNavEnabled = keyboardNavigation === 'on' && !isGridLayout
 
   const articleIds = useMemo(() => articles.map(a => String(a.id)), [articles])
 

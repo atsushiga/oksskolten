@@ -15,6 +15,7 @@ import { useHighlightTheme } from './use-highlight-theme'
 import { useArticleFont } from './use-article-font'
 import { useLayout } from './use-layout'
 import { useMascot, type MascotChoice } from './use-mascot'
+import { useKeyboardNavSetting } from './use-keyboard-nav-setting'
 import type { LayoutName } from '../data/layouts'
 import type { Theme } from '../data/themes'
 import { fetcher, apiPatch, authHeaders } from '../lib/fetcher'
@@ -37,6 +38,7 @@ interface Prefs {
   'reading.category_unread_only': string | null
   'appearance.list_layout': string | null
   'appearance.mascot': string | null
+  'reading.keyboard_navigation': string | null
   'chat.provider': string | null
   'chat.model': string | null
   'summary.provider': string | null
@@ -71,6 +73,7 @@ export function useSettings() {
   const { categoryUnreadOnly, setCategoryUnreadOnly } = useCategoryUnreadOnly()
   const { layout, setLayout } = useLayout()
   const { mascot, setMascot } = useMascot()
+  const { keyboardNavigation, setKeyboardNavigation } = useKeyboardNavSetting()
   const [chatProvider, setChatProviderState] = useState<string | null>(null)
   const [chatModel, setChatModelState] = useState<string | null>(null)
   const [summaryProvider, setSummaryProviderState] = useState<string | null>(null)
@@ -115,6 +118,8 @@ export function useSettings() {
   layoutRef.current = layout
   const mascotRef = useRef(mascot)
   mascotRef.current = mascot
+  const keyboardNavigationRef = useRef(keyboardNavigation)
+  keyboardNavigationRef.current = keyboardNavigation
 
   // DB → local hydration (data-driven)
   useEffect(() => {
@@ -151,6 +156,8 @@ export function useSettings() {
         validate: v => v === 'list' || v === 'card' || v === 'magazine' || v === 'compact' },
       { key: 'appearance.mascot', setter: setMascot, backfillRef: mascotRef,
         validate: v => v === 'off' || v === 'dream-puff' || v === 'sleepy-giant' },
+      { key: 'reading.keyboard_navigation', setter: setKeyboardNavigation, backfillRef: keyboardNavigationRef,
+        validate: v => v === 'on' || v === 'off' },
       { key: 'appearance.highlight_theme', setter: setHighlightTheme },
       { key: 'appearance.font_family', setter: setArticleFont },
       { key: 'chat.provider', setter: setChatProviderState },
@@ -250,6 +257,7 @@ export function useSettings() {
     syncedSetLayout,
     syncedSetArticleFont,
     syncedSetMascot,
+    syncedSetKeyboardNavigation,
     syncedSetChatProvider,
     syncedSetChatModel,
     syncedSetSummaryProvider,
@@ -278,6 +286,7 @@ export function useSettings() {
       syncedSetLayout: make<LayoutName>('appearance.list_layout', setLayout),
       syncedSetArticleFont: make<string>('appearance.font_family', setArticleFont),
       syncedSetMascot: make<MascotChoice>('appearance.mascot', setMascot),
+      syncedSetKeyboardNavigation: make<'on' | 'off'>('reading.keyboard_navigation', setKeyboardNavigation),
       syncedSetChatProvider: make<string>('chat.provider', setChatProviderState),
       syncedSetChatModel: make<string>('chat.model', setChatModelState),
       syncedSetSummaryProvider: make<string>('summary.provider', setSummaryProviderState),
@@ -373,6 +382,8 @@ export function useSettings() {
     setTranslateModel: syncedSetTranslateModel,
     translateTargetLang,
     setTranslateTargetLang: syncedSetTranslateTargetLang,
+    keyboardNavigation,
+    setKeyboardNavigation: syncedSetKeyboardNavigation,
   }
 }
 

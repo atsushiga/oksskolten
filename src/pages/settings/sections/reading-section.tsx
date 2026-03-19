@@ -7,6 +7,7 @@ export function ReadingSection() {
   const { settings } = useAppLayout()
   const {
     autoMarkRead, setAutoMarkRead,
+    keyboardNavigation, setKeyboardNavigation,
     showUnreadIndicator, setShowUnreadIndicator,
     indicatorStyle,
     internalLinks, setInternalLinks,
@@ -374,6 +375,20 @@ export function ReadingSection() {
           ]}
           value={categoryUnreadOnly}
           onChange={setCategoryUnreadOnly}
+        />
+      </div>
+
+      <div className="mt-6">
+        <p className="text-sm text-text mb-1">{t('settings.keyboardNavigation')}</p>
+        <p className="text-xs text-muted mb-3">{t('settings.keyboardNavigationDesc')}</p>
+        <RadioGroup
+          name="keyboardNavigation"
+          options={[
+            { value: 'on' as const, label: t('settings.keyboardNavigationOn') },
+            { value: 'off' as const, label: t('settings.keyboardNavigationOff') },
+          ]}
+          value={keyboardNavigation}
+          onChange={setKeyboardNavigation}
         />
       </div>
 
