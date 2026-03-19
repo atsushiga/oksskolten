@@ -285,7 +285,7 @@ describe('useKeyboardNavigation', () => {
   })
 
   describe('action callbacks', () => {
-    it('calls onBookmarkToggle when l is pressed with a focused item', () => {
+    it('calls onBookmarkToggle when b is pressed with a focused item', () => {
       const onBookmarkToggle = vi.fn()
       renderHook(() => useKeyboardNavigation({
         items: ['a', 'b'],
@@ -295,7 +295,7 @@ describe('useKeyboardNavigation', () => {
         enabled: true,
       }))
 
-      fireKey('l')
+      fireKey('b')
       expect(onBookmarkToggle).toHaveBeenCalledWith('a')
     })
 
@@ -325,7 +325,7 @@ describe('useKeyboardNavigation', () => {
         enabled: true,
       }))
 
-      fireKey('l')
+      fireKey('b')
       fireKey(';')
       expect(onBookmarkToggle).not.toHaveBeenCalled()
       expect(onOpenExternal).not.toHaveBeenCalled()

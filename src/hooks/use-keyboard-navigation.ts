@@ -77,7 +77,7 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions) {
         return
       }
 
-      if (key === 'l' && focusedItemId && onBookmarkToggle) {
+      if (key === 'b' && focusedItemId && onBookmarkToggle) {
         onBookmarkToggle(focusedItemId)
         return
       }
