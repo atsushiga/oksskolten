@@ -33,24 +33,24 @@ Because Oksskolten always has the complete text, AI summarization and translatio
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/home-default-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/home-default-light.png">
-    <img alt="Home" src="docs/screenshots/home-default-dark.png" width="49%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/home-default-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/home-default-light.png">
+    <img alt="Home" src="docs/images/screenshots/home-default-dark.png" width="49%">
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/inbox-default-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/inbox-default-light.png">
-    <img alt="Inbox" src="docs/screenshots/inbox-default-dark.png" width="49%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/inbox-default-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/inbox-default-light.png">
+    <img alt="Inbox" src="docs/images/screenshots/inbox-default-dark.png" width="49%">
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/article-chat-default-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/article-chat-default-light.png">
-    <img alt="Article" src="docs/screenshots/article-chat-default-dark.png" width="49%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/article-chat-default-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/article-chat-default-light.png">
+    <img alt="Article" src="docs/images/screenshots/article-chat-default-dark.png" width="49%">
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/appearance-default-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/appearance-default-light.png">
-    <img alt="Appearance" src="docs/screenshots/appearance-default-dark.png" width="49%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/appearance-default-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/appearance-default-light.png">
+    <img alt="Appearance" src="docs/images/screenshots/appearance-default-dark.png" width="49%">
   </picture>
 </p>
 
