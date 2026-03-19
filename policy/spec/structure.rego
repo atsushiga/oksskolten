@@ -23,14 +23,9 @@ deny contains msg if {
 	msg := sprintf("Spec must have exactly one H1, found %d", [count(h1s)])
 }
 
-# Rule 2: Feature specs (filename contains _feature_) must have exactly one H2
-# When input.metadata.is_feature is true, enforce single H2.
-deny contains msg if {
-	object.get(input, ["metadata", "is_feature"], false) == true
-	h2s := [h | some h in headings; h.depth == 2]
-	count(h2s) != 1
-	msg := sprintf("Feature spec must have exactly one H2 (feature name), found %d", [count(h2s)])
-}
+# Rule 2: Feature specs must not have a redundant H2 repeating the feature name.
+# Feature specs use H2 for sections (Overview, Motivation, etc.) — no standalone feature-name H2.
+# (Enforced via Rule 8 allowed-H2 list; this rule number is reserved for clarity.)
 
 # Rule 3: Forbidden section names
 forbidden_prefixes := ["Current Status", "Implementation Checklist", "Discrepancies", "Updates", "Reference:"]
@@ -122,4 +117,64 @@ deny contains msg if {
 	expected_url := sprintf("./%s", [f])
 	not expected_url in _all_link_urls
 	msg := sprintf("01_overview.md must link to all spec files, missing: '%s'", [f])
+}
+
+# Rule 8: Feature spec H2 structure
+# Feature specs use H2 for top-level sections (no redundant feature-name H2).
+# Required H2s: Overview, Motivation, Design (in that order)
+# Optional H2: Scope (must appear between Motivation and Design)
+# No other H2s are allowed. H3s under Design are unrestricted.
+
+_feature_allowed_h2s := {"Overview", "Scope", "Motivation", "Design"}
+_feature_required_h2s := ["Overview", "Motivation", "Design"]
+
+# Extract H2 names in order
+_h2_names := [heading_text(h) | some h in input.children; h.type == "heading"; h.depth == 2]
+
+# 8a: Required H2s must be present
+deny contains msg if {
+	object.get(input, ["metadata", "is_feature"], false) == true
+	some required in _feature_required_h2s
+	not required in {name | some name in _h2_names}
+	msg := sprintf("Feature spec must have '## %s' section", [required])
+}
+
+# 8b: Only allowed H2 names
+deny contains msg if {
+	object.get(input, ["metadata", "is_feature"], false) == true
+	some name in _h2_names
+	not name in _feature_allowed_h2s
+	msg := sprintf("Feature spec H2 must be one of {Overview, Scope, Motivation, Design}, got: '## %s'", [name])
+}
+
+# 8c: H2 order must be Overview → Motivation → (Scope) → Design
+# Validate by checking that the sequence without Scope equals the required order.
+_h2_names_without_scope := [name | some name in _h2_names; name != "Scope"]
+
+deny contains msg if {
+	object.get(input, ["metadata", "is_feature"], false) == true
+	# All required H2s are present (skip order check if missing — 8a handles that)
+	every required in _feature_required_h2s {
+		required in {name | some name in _h2_names}
+	}
+	_h2_names_without_scope != _feature_required_h2s
+	msg := "Feature spec H2 order must be: Overview → Motivation → (Scope) → Design"
+}
+
+# 8d: Scope must appear between Motivation and Design (index check)
+deny contains msg if {
+	object.get(input, ["metadata", "is_feature"], false) == true
+	some i, name in _h2_names
+	name == "Scope"
+	some mi, mname in _h2_names
+	mname == "Motivation"
+	some di, dname in _h2_names
+	dname == "Design"
+	not _between(i, mi, di)
+	msg := "Feature spec '## Scope' must appear between Motivation and Design"
+}
+
+_between(i, lo, hi) if {
+	i > lo
+	i < hi
 }

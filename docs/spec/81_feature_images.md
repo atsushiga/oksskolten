@@ -2,9 +2,15 @@
 
 > [Back to Overview](./01_overview.md)
 
-## Image Archive
+## Overview
 
 A feature that downloads images in article Markdown (`![alt](url)`), saves them locally or uploads them to a remote host, and rewrites the URLs. This protects against broken links when the original images become unavailable.
+
+## Motivation
+
+Hotlinked images become inaccessible when the original article is deleted or the hosting service goes down. For articles worth keeping long-term, archiving images locally (or to a remote host) ensures the reading experience is preserved indefinitely.
+
+## Design
 
 ### Enabling
 

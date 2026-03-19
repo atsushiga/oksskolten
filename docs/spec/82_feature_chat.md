@@ -2,9 +2,15 @@
 
 > [Back to Overview](./01_overview.md)
 
-## Chat
+## Overview
 
 Interactive chat feature. Users can search articles, analyze content, and get recommendations using natural language.
+
+## Motivation
+
+A core feature of Oksskolten. Enables natural-language interaction with the article database — ask questions about specific articles, perform cross-feed search, get reading recommendations, and trigger actions (summarize, translate, bookmark) through conversation.
+
+## Design
 
 ### Architecture
 

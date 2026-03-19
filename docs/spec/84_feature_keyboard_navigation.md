@@ -2,11 +2,30 @@
 
 > [Back to Overview](./01_overview.md)
 
-## Keyboard Navigation
-
-### Overview
+## Overview
 
 Vim-like keyboard navigation for the article list. Enables reading and performing actions on articles without using a mouse. Always enabled; no setting to disable.
+
+## Motivation
+
+Keyboard-driven article navigation is a standard feature in major RSS readers (Feedly, Inoreader, Miniflux). Enables efficient reading workflows without reaching for the mouse.
+
+## Scope
+
+Keyboard navigation targets the **article list** only. The feed list (sidebar) is out of scope.
+
+### State Management
+
+A `KeyboardNavigationContext` (React Context) is created and its Provider placed in `PageLayout`.
+
+Managed state:
+- `focusedItemId`: `string | null` — ID of the currently focused article
+
+### Initial Focus
+
+When `focusedItemId` is `null` and `j` or `k` is pressed, focus moves to the first item in the list.
+
+## Design
 
 ### Existing Shortcuts
 
@@ -29,21 +48,6 @@ In `src/components/feed/feed-list.tsx`:
 | Shortcut | Action |
 |---|---|
 | `Escape` | Clear multi-selection |
-
-### Scope
-
-Keyboard navigation targets the **article list** only. The feed list (sidebar) is out of scope.
-
-#### State Management
-
-A `KeyboardNavigationContext` (React Context) is created and its Provider placed in `PageLayout`.
-
-Managed state:
-- `focusedItemId`: `string | null` — ID of the currently focused article
-
-#### Initial Focus
-
-When `focusedItemId` is `null` and `j` or `k` is pressed, focus moves to the first item in the list.
 
 ### Supported Layouts
 

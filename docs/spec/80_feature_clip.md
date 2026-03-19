@@ -2,11 +2,15 @@
 
 > [Back to Overview](./01_overview.md)
 
-## Clip
-
-### Overview
+## Overview
 
 A feature that allows users to manually save (clip) arbitrary URLs. Articles are ingested through a flow independent of RSS feeds.
+
+## Motivation
+
+Addresses the need to save articles without subscribing to a feed — one-off viral posts, articles from sites not worth a full subscription, etc. Similar to Pocket's 'save for later' model, but integrated into the RSS reader so clipped articles share the same reading experience (summaries, translations, bookmarks, search).
+
+## Design
 
 ### Clip Feed
 

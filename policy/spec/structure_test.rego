@@ -44,33 +44,6 @@ test_h1_multiple if {
 }
 
 # ---------------------------------------------------------------------------
-# Rule 2: Feature spec single H2
-# ---------------------------------------------------------------------------
-
-test_feature_single_h2_pass if {
-	count(deny) == 0 with input as feature_doc([
-		h(1, "Oksskolten Spec — Clip"),
-		h(2, "Clip"),
-	])
-}
-
-test_feature_multiple_h2_fail if {
-	"Feature spec must have exactly one H2 (feature name), found 2" in deny with input as feature_doc([
-		h(1, "Oksskolten Spec — Clip"),
-		h(2, "Clip"),
-		h(2, "Extra"),
-	])
-}
-
-test_non_feature_multiple_h2_ok if {
-	count(deny) == 0 with input as doc([
-		h(1, "Oksskolten Spec — Overview"),
-		h(2, "Stack"),
-		h(2, "Deploy"),
-	])
-}
-
-# ---------------------------------------------------------------------------
 # Rule 3: Forbidden section names
 # ---------------------------------------------------------------------------
 
@@ -230,4 +203,119 @@ test_overview_links_skips_self if {
 		["01_overview.md"],
 		[h(1, "Oksskolten Spec — Overview")],
 	)
+}
+
+# ---------------------------------------------------------------------------
+# Rule 8: Feature spec H2 structure
+# ---------------------------------------------------------------------------
+
+# 8a: All required H2s present (Overview, Motivation, Design)
+test_feature_h2_all_required_pass if {
+	count(deny) == 0 with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Overview"),
+		h(2, "Motivation"),
+		h(2, "Design"),
+	])
+}
+
+test_feature_h2_missing_overview if {
+	"Feature spec must have '## Overview' section" in deny with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Motivation"),
+		h(2, "Design"),
+	])
+}
+
+test_feature_h2_missing_motivation if {
+	"Feature spec must have '## Motivation' section" in deny with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Overview"),
+		h(2, "Design"),
+	])
+}
+
+test_feature_h2_missing_design if {
+	"Feature spec must have '## Design' section" in deny with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Overview"),
+		h(2, "Motivation"),
+	])
+}
+
+# 8b: Disallowed H2
+test_feature_h2_disallowed if {
+	"Feature spec H2 must be one of {Overview, Scope, Motivation, Design}, got: '## API'" in deny with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Overview"),
+		h(2, "Motivation"),
+		h(2, "Design"),
+		h(2, "API"),
+	])
+}
+
+# Feature-name H2 is also disallowed (redundant with H1)
+test_feature_h2_feature_name_disallowed if {
+	"Feature spec H2 must be one of {Overview, Scope, Motivation, Design}, got: '## Clip'" in deny with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Clip"),
+		h(2, "Overview"),
+		h(2, "Motivation"),
+		h(2, "Design"),
+	])
+}
+
+# H3 under Design is fine
+test_feature_h3_under_design_ok if {
+	count(deny) == 0 with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Overview"),
+		h(2, "Motivation"),
+		h(2, "Design"),
+		h(3, "API"),
+		h(3, "Frontend"),
+		h(3, "DB Schema"),
+	])
+}
+
+# 8c: Wrong order
+test_feature_h2_wrong_order if {
+	"Feature spec H2 order must be: Overview → Motivation → (Scope) → Design" in deny with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Design"),
+		h(2, "Overview"),
+		h(2, "Motivation"),
+	])
+}
+
+# Optional Scope in correct position
+test_feature_h2_with_scope_pass if {
+	count(deny) == 0 with input as feature_doc([
+		h(1, "Oksskolten Spec — Keyboard Navigation"),
+		h(2, "Overview"),
+		h(2, "Motivation"),
+		h(2, "Scope"),
+		h(2, "Design"),
+	])
+}
+
+# 8d: Scope in wrong position (before Motivation)
+test_feature_h2_scope_wrong_position if {
+	"Feature spec '## Scope' must appear between Motivation and Design" in deny with input as feature_doc([
+		h(1, "Oksskolten Spec — Clip"),
+		h(2, "Overview"),
+		h(2, "Scope"),
+		h(2, "Motivation"),
+		h(2, "Design"),
+	])
+}
+
+# Non-feature specs are not affected
+test_non_feature_free_h2 if {
+	count(deny) == 0 with input as doc([
+		h(1, "Oksskolten Spec — API"),
+		h(2, "API Specification"),
+		h(3, "Endpoints"),
+		h(3, "Error Handling"),
+	])
 }

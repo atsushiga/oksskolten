@@ -2,18 +2,18 @@
 
 > [Back to Overview](./01_overview.md)
 
-## Similar Article Detection
-
-### Problem
-
-Users subscribing to multiple feeds covering the same topics (e.g., tech news) see the same story reported by different sources repeatedly. This creates noise in the feed list.
-
-### Solution
+## Overview
 
 Detect similar articles across different feeds and provide two behaviors:
 
 1. **Similar article banner**: When viewing an article, show a notice listing other sources that covered the same story
 2. **Auto-mark-read**: When a user has already read a similar article from another source, automatically mark the duplicate as `seen_at` (removes it from unread count)
+
+## Motivation
+
+Users subscribing to multiple feeds covering the same topics (e.g., tech news) see the same story reported by different sources repeatedly. This creates noise in the feed list.
+
+## Design
 
 ### Detection Algorithm
 
