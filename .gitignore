@@ -13,3 +13,10 @@ coverage/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/rules/.*.md
+
+# Fly.io CLI local state/cache (do not commit)
+.fly_home/
+.flytmp/
+
+# Local scratch
+docs/todo.md
