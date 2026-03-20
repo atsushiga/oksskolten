@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Oksskolten Clip Settings</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        padding: 16px;
+        max-width: 640px;
+        margin: 0 auto;
+      }
+      label { display: block; margin-top: 12px; font-weight: 600; }
+      input {
+        width: 100%;
+        padding: 10px;
+        margin-top: 6px;
+        box-sizing: border-box;
+      }
+      button {
+        margin-top: 14px;
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      .hint {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #555;
+        line-height: 1.4;
+      }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    </style>
+  </head>
+  <body>
+    <h2>Oksskolten Clip Settings</h2>
+
+    <label for="baseUrl">Oksskolten base URL</label>
+    <input id="baseUrl" placeholder="https://oksskolten.example.com" />
+
+    <label for="token">API token (Authorization: Bearer ok_...)</label>
+    <input id="token" placeholder="ok_..." />
+
+    <div class="hint">
+      必ず <code>write</code> スコープを持つトークンにしてください。<br />
+      拡張はクリックした時に「アクティブタブのURL」を `POST /api/articles/from-url` に送ります。
+    </div>
+
+    <button id="save">Save</button>
+
+    <script src="options.js"></script>
+  </body>
+</html>

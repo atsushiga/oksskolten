@@ -194,6 +194,31 @@ docker compose -f compose.yaml -f compose.prod.yaml up --build -d
 
 The production compose file includes a `cloudflared` sidecar that exposes the app via Cloudflare Tunnel — no port forwarding or static IP required.
 
+## Chrome Extension (Clip Active Tab)
+
+このリポジトリには、Oksskolten を開かずに「現在アクティブなタブのURL」をクリップとして登録できる小さな Chrome 拡張が含まれています。
+
+Extension files:
+`docs/chrome-extensions/oksskolten-clip/`
+
+### Setup
+1. Oksskolten 側で `write` スコープの API トークン（`ok_...`）を作成します（`Settings -> Security -> API Tokens`）。
+2. `chrome://extensions` を開いて「デベロッパーモード」を有効化します。
+3. 「パッキング解除」→ `docs/chrome-extensions/oksskolten-clip/` を選択して読み込みます。
+4. 拡張のオプション画面を開き、トークンを貼り付けます。あわせて Oksskolten の base URL を指定します。
+
+Note:
+- base URL は、この拡張の `manifest.json` で許可されたもののみ動作します（現状は `https://oksskolten-atsushi.fly.dev` と `http://localhost:3000` が許可されています）。
+
+### Usage
+1. クリップしたい `https://...` ページを開きます。
+2. 拡張アイコンをクリックします。
+3. 拡張が、Oksskolten に `POST /api/articles/from-url` を送り、アクティブタブのURLを登録します。
+
+Note:
+- サーバは `https://` のURLのみ受け付けます。
+- 既にRSS側のフィード記事として存在する場合、拡張は 1 回だけ `force=true` でリトライします（アプリ内UIと同じ挙動）。
+
 ## License
 
 [AGPL-3.0](LICENSE)
