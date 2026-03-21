@@ -1,6 +1,12 @@
 const DEFAULT_BASE_URL = "https://oksskolten-atsushi.fly.dev";
-const BASE_URL_KEY = "oksskolten_clip_base_url";
-const API_TOKEN_KEY = "oksskolten_clip_api_token";
+const ENV_KEY = "oksskolten_clip_environment";
+const TEST_BASE_URL_KEY = "oksskolten_clip_test_base_url";
+const TEST_API_TOKEN_KEY = "oksskolten_clip_test_api_token";
+const PRODUCTION_BASE_URL_KEY = "oksskolten_clip_production_base_url";
+const PRODUCTION_API_TOKEN_KEY = "oksskolten_clip_production_api_token";
+const LEGACY_BASE_URL_KEY = "oksskolten_clip_base_url";
+const LEGACY_API_TOKEN_KEY = "oksskolten_clip_api_token";
+const DEFAULT_ENVIRONMENT = "production";
 
 function notify(title, message) {
   // まずはクリップの成功/失敗の本体処理を止めないため、
@@ -28,6 +34,24 @@ function normalizeBaseUrl(rawBaseUrl) {
   return url.toString().replace(/\/+$/, "");
 }
 
+function getActiveConfig(data) {
+  const environment = data[ENV_KEY] === "test" ? "test" : DEFAULT_ENVIRONMENT;
+
+  if (environment === "test") {
+    return {
+      environment,
+      baseUrl: data[TEST_BASE_URL_KEY] || "",
+      token: data[TEST_API_TOKEN_KEY] || "",
+    };
+  }
+
+  return {
+    environment,
+    baseUrl: data[PRODUCTION_BASE_URL_KEY] || data[LEGACY_BASE_URL_KEY] || DEFAULT_BASE_URL,
+    token: data[PRODUCTION_API_TOKEN_KEY] || data[LEGACY_API_TOKEN_KEY] || "",
+  };
+}
+
 function getTabHtml(tabId) {
   return new Promise((resolve) => {
     chrome.scripting.executeScript(
@@ -49,20 +73,37 @@ function getTabHtml(tabId) {
 async function clipUrl(tab, force = false) {
   const pageUrl = tab?.url || null;
   setBadge("CLIP", "#9ca3af");
-  const data = await chrome.storage.local.get([BASE_URL_KEY, API_TOKEN_KEY]);
+  const data = await chrome.storage.local.get([
+    ENV_KEY,
+    TEST_BASE_URL_KEY,
+    TEST_API_TOKEN_KEY,
+    PRODUCTION_BASE_URL_KEY,
+    PRODUCTION_API_TOKEN_KEY,
+    LEGACY_BASE_URL_KEY,
+    LEGACY_API_TOKEN_KEY,
+  ]);
+  const activeConfig = getActiveConfig(data);
+  const rawBaseUrl = String(activeConfig.baseUrl || "").trim();
+
+  if (!rawBaseUrl) {
+    setBadge("BASE", "#ef4444");
+    notify("Oksskolten Clip", `Base URL is not set for ${activeConfig.environment}. Open extension options.`);
+    return;
+  }
+
   let baseUrl;
   try {
-    baseUrl = normalizeBaseUrl(data[BASE_URL_KEY] || DEFAULT_BASE_URL);
+    baseUrl = normalizeBaseUrl(rawBaseUrl);
   } catch {
     setBadge("BASE", "#ef4444");
     notify("Oksskolten Clip", "Base URL is invalid. Use http://localhost:3000 or your deployed URL.");
     return;
   }
-  const token = (data[API_TOKEN_KEY] || "").trim();
+  const token = (activeConfig.token || "").trim();
 
   if (!token) {
     setBadge("TOKEN", "#ef4444");
-    notify("Oksskolten Clip", "API token is not set. Open extension options.");
+    notify("Oksskolten Clip", `API token is not set for ${activeConfig.environment}. Open extension options.`);
     return;
   }
 

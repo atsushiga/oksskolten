@@ -4,13 +4,7 @@
   "version": "1.0.0",
   "description": "Clip the active tab URL into Oksskolten",
   "permissions": ["activeTab", "storage", "notifications", "tabs", "scripting"],
-  "host_permissions": [
-    "https://oksskolten-atsushi.fly.dev/*",
-    "http://localhost:3000/*",
-    "http://127.0.0.1:3000/*",
-    "http://localhost:5173/*",
-    "http://127.0.0.1:5173/*"
-  ],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "Clip active tab"
   },

@@ -17,10 +17,21 @@
         margin-top: 6px;
         box-sizing: border-box;
       }
+      select {
+        width: 100%;
+        padding: 10px;
+        margin-top: 6px;
+        box-sizing: border-box;
+      }
       button {
         margin-top: 14px;
         padding: 10px 14px;
         cursor: pointer;
+      }
+      .section {
+        margin-top: 20px;
+        padding-top: 12px;
+        border-top: 1px solid #ddd;
       }
       .hint {
         margin-top: 10px;
@@ -34,14 +45,33 @@
   <body>
     <h2>Oksskolten Clip Settings</h2>
 
-    <label for="baseUrl">Oksskolten base URL</label>
-    <input id="baseUrl" placeholder="https://oksskolten.example.com" />
+    <label for="environment">Current environment</label>
+    <select id="environment">
+      <option value="test">Test</option>
+      <option value="production">Production</option>
+    </select>
 
-    <label for="token">API token (Authorization: Bearer ok_...)</label>
-    <input id="token" placeholder="ok_..." />
+    <div class="section">
+      <h3>Test</h3>
+      <label for="testBaseUrl">Oksskolten base URL</label>
+      <input id="testBaseUrl" placeholder="http://localhost:3000" />
+
+      <label for="testToken">API token (Authorization: Bearer ok_...)</label>
+      <input id="testToken" placeholder="ok_..." />
+    </div>
+
+    <div class="section">
+      <h3>Production</h3>
+      <label for="productionBaseUrl">Oksskolten base URL</label>
+      <input id="productionBaseUrl" placeholder="https://oksskolten.example.com" />
+
+      <label for="productionToken">API token (Authorization: Bearer ok_...)</label>
+      <input id="productionToken" placeholder="ok_..." />
+    </div>
 
     <div class="hint">
       必ず <code>write</code> スコープを持つトークンにしてください。<br />
+      `Current environment` で選んだ設定が、拡張アイコンクリック時に使われます。<br />
       拡張はクリックした時に、現在タブの URL と表示中 HTML を `POST /api/articles/from-url` に送ります。<br />
       paywall サイトのフルテキスト取得は保証しません。
     </div>
