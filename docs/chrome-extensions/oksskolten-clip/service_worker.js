@@ -70,6 +70,81 @@ function getTabHtml(tabId) {
   });
 }
 
+function shouldSyncCookies(pageUrl) {
+  try {
+    const hostname = new URL(pageUrl).hostname.toLowerCase();
+    return hostname === "note.com" || hostname.endsWith(".note.com");
+  } catch {
+    return false;
+  }
+}
+
+function getCookies(pageUrl) {
+  return new Promise((resolve, reject) => {
+    chrome.cookies.getAll({ url: pageUrl }, (cookies) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(cookies || []);
+    });
+  });
+}
+
+function getTabUserAgent(tabId) {
+  return new Promise((resolve) => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        func: () => navigator.userAgent,
+      },
+      (results) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(results?.[0]?.result || null);
+      },
+    );
+  });
+}
+
+async function importCookieSession(tab, baseUrl, token) {
+  if (!tab?.id || !tab?.url || !shouldSyncCookies(tab.url)) return;
+
+  const cookies = await getCookies(tab.url);
+  if (!cookies.length) {
+    notify("Oksskolten Clip", "Cookie sync skipped: no matching cookies found.");
+    return;
+  }
+
+  const userAgent = await getTabUserAgent(tab.id);
+  const res = await fetch(`${baseUrl}/api/settings/site-access/import-session`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      url: tab.url,
+      profileName: "note.com",
+      userAgent: typeof userAgent === "string" ? userAgent : undefined,
+      cookies: cookies.map((cookie) => ({
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+      })),
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = body?.error ? String(body.error) : `HTTP ${res.status}`;
+    throw new Error(`Cookie sync failed: ${msg}`);
+  }
+}
+
 async function clipUrl(tab, force = false) {
   const pageUrl = tab?.url || null;
   setBadge("CLIP", "#9ca3af");
@@ -111,6 +186,12 @@ async function clipUrl(tab, force = false) {
     setBadge("NOURL", "#ef4444");
     notify("Oksskolten Clip", "Only https:// URLs can be clipped.");
     return;
+  }
+
+  try {
+    await importCookieSession(tab, baseUrl, token);
+  } catch (e) {
+    notify("Oksskolten Clip", e instanceof Error ? e.message : String(e));
   }
 
   const pageHtml = tab?.id ? await getTabHtml(tab.id) : null;

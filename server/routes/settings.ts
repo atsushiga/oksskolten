@@ -15,6 +15,7 @@ import { parseOrBadRequest } from '../lib/validation.js'
 import {
   clearSiteAccessConfig,
   getSiteAccessConfig,
+  importSiteAccessCookieSession,
   saveSiteAccessConfig,
   testSiteAccessProfile,
 } from '../site-auth.js'
@@ -40,6 +41,23 @@ const SiteAccessBody = z.object({
 const SiteAccessTestBody = z.object({
   profile: SiteAccessProfileBody.extend({ name: z.string() }),
   url: z.string().optional(),
+})
+const HttpsUrl = z
+  .string({ error: 'url is required' })
+  .min(1, 'url is required')
+  .url('must be a valid URL')
+  .refine((u) => u.startsWith('https://'), { message: 'Only https:// URLs are allowed' })
+const SiteAccessImportedCookieBody = z.object({
+  name: z.string().min(1, 'cookie name is required'),
+  value: z.string(),
+  domain: z.string().optional(),
+  path: z.string().optional(),
+})
+const SiteAccessImportSessionBody = z.object({
+  url: HttpsUrl,
+  profileName: z.string().optional(),
+  userAgent: z.string().optional(),
+  cookies: z.array(SiteAccessImportedCookieBody).min(1, 'at least one cookie is required'),
 })
 const PREF_KEYS = [
   'appearance.color_theme',
@@ -527,6 +545,32 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
       reply.send(result)
     } catch (err) {
       reply.status(400).send({ error: err instanceof Error ? err.message : 'Site access test failed' })
+    }
+  })
+
+  api.post('/api/settings/site-access/import-session', { preHandler: [requireJson] }, async (request, reply) => {
+    const body = parseOrBadRequest(SiteAccessImportSessionBody, request.body, reply)
+    if (!body) return
+
+    try {
+      const profile = importSiteAccessCookieSession({
+        url: body.url,
+        profileName: body.profileName,
+        userAgent: body.userAgent,
+        cookies: body.cookies,
+      })
+      reply.send({
+        profile: {
+          id: profile.id,
+          name: profile.name,
+          enabled: profile.enabled,
+          configured: profile.configured,
+          targetDomains: profile.targetDomains,
+        },
+        imported_cookie_count: body.cookies.length,
+      })
+    } catch (err) {
+      reply.status(400).send({ error: err instanceof Error ? err.message : 'Site access session import failed' })
     }
   })
 

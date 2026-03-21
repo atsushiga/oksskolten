@@ -65,6 +65,13 @@ export interface SiteAccessTestResult {
   profileName?: string | null
 }
 
+export interface ImportedSiteCookie {
+  name: string
+  value: string
+  domain?: string | null
+  path?: string | null
+}
+
 function normalizeDomain(input: string): string {
   return input.trim().toLowerCase().replace(/^\.+/, '').replace(/\.+$/, '')
 }
@@ -281,6 +288,86 @@ export function getSiteAccessHeaders(url: string): Record<string, string> {
     ...(match.userAgent ? { 'User-Agent': match.userAgent } : {}),
     Cookie: match.cookie,
   }
+}
+
+function normalizeCookieDomain(input: string): string {
+  return normalizeDomain(input.replace(/^\./, ''))
+}
+
+function buildCookieHeader(cookies: ImportedSiteCookie[], hostname: string): string {
+  return cookies
+    .map(cookie => ({
+      name: cookie.name.trim(),
+      value: cookie.value,
+      domain: cookie.domain ? normalizeCookieDomain(cookie.domain) : null,
+      path: cookie.path?.trim() || '/',
+    }))
+    .filter(cookie => cookie.name && cookie.value !== '')
+    .filter(cookie => !cookie.domain || hostname === cookie.domain || hostname.endsWith(`.${cookie.domain}`))
+    .sort((a, b) =>
+      (b.path.length - a.path.length) ||
+      ((b.domain?.length ?? 0) - (a.domain?.length ?? 0)) ||
+      a.name.localeCompare(b.name),
+    )
+    .map(cookie => `${cookie.name}=${cookie.value}`)
+    .join('; ')
+}
+
+function deriveTargetDomains(url: string, cookies: ImportedSiteCookie[]): string[] {
+  const hostname = new URL(url).hostname.toLowerCase()
+  const domains = new Set<string>([hostname])
+  for (const cookie of cookies) {
+    if (!cookie.domain) continue
+    const domain = normalizeCookieDomain(cookie.domain)
+    if (!domain) continue
+    if (hostname === domain || hostname.endsWith(`.${domain}`)) domains.add(domain)
+  }
+  return [...domains]
+}
+
+export function importSiteAccessCookieSession(input: {
+  url: string
+  profileName?: string | null
+  userAgent?: string | null
+  cookies: ImportedSiteCookie[]
+}): SiteAccessProfile {
+  const url = input.url.trim()
+  const parsed = new URL(url)
+  if (parsed.protocol !== 'https:') throw new Error('Only https:// URLs are supported')
+
+  const hostname = parsed.hostname.toLowerCase()
+  const cookie = buildCookieHeader(input.cookies, hostname)
+  if (!cookie) throw new Error('No matching cookies found for the requested URL')
+
+  const targetDomains = deriveTargetDomains(url, input.cookies)
+  const current = readStoredProfiles()
+  const existingIndex = current.findIndex(profile => matchesTargetDomain(url, profile.targetDomains))
+  const existing = existingIndex >= 0 ? current[existingIndex] : null
+  const id = existing?.id || randomId()
+  const name = input.profileName?.trim() || existing?.name || hostname
+  const userAgent = input.userAgent?.trim() || existing?.userAgent || null
+  const mergedDomains = [...new Set([...(existing?.targetDomains || []), ...targetDomains])]
+
+  const nextProfile: StoredSiteAccessProfile = {
+    id,
+    name,
+    enabled: true,
+    targetDomains: mergedDomains,
+    cookieEncrypted: encryptSecret(cookie),
+    browserCookiesEncrypted: existing?.browserCookiesEncrypted ?? null,
+    browserStorageEncrypted: existing?.browserStorageEncrypted ?? null,
+    userAgent,
+    lastSyncAt: new Date().toISOString(),
+  }
+
+  if (existingIndex >= 0) {
+    current.splice(existingIndex, 1, nextProfile)
+  } else {
+    current.push(nextProfile)
+  }
+
+  writeStoredProfiles(current)
+  return toPublicProfile(nextProfile)
 }
 
 function looksLikeAuthWall(text: string): boolean {

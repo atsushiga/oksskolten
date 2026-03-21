@@ -3,7 +3,7 @@
   "name": "Oksskolten Clip",
   "version": "1.0.0",
   "description": "Clip the active tab URL into Oksskolten",
-  "permissions": ["activeTab", "storage", "notifications", "tabs", "scripting"],
+  "permissions": ["activeTab", "storage", "notifications", "tabs", "scripting", "cookies"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "Clip active tab"

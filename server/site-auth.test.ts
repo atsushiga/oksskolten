@@ -7,7 +7,7 @@ const { mockSafeFetch } = vi.hoisted(() => ({
 vi.mock('./fetcher/ssrf.js', () => ({
   safeFetch: (...args: unknown[]) => mockSafeFetch(...args),
 }))
-import { getSiteAccessHeaders, saveSiteAccessConfig, testSiteAccessProfile } from './site-auth.js'
+import { getSiteAccessHeaders, importSiteAccessCookieSession, saveSiteAccessConfig, testSiteAccessProfile } from './site-auth.js'
 
 beforeEach(() => {
   setupTestDb()
@@ -54,6 +54,30 @@ describe('site auth profile matching', () => {
     })
 
     expect(getSiteAccessHeaders('https://nikkei.com/foo')).toEqual({})
+  })
+
+  it('imports cookies into a matching profile from browser session sync', () => {
+    const profile = importSiteAccessCookieSession({
+      url: 'https://note.com/premium/test',
+      profileName: 'note.com',
+      userAgent: 'Mozilla/5.0 Chrome/145.0.0.0',
+      cookies: [
+        { name: '_note_session_v5', value: 'abc', domain: '.note.com', path: '/' },
+        { name: 'apay-session-set', value: 'def', domain: 'note.com', path: '/' },
+      ],
+    })
+
+    expect(profile).toMatchObject({
+      name: 'note.com',
+      enabled: true,
+      configured: true,
+      targetDomains: expect.arrayContaining(['note.com']),
+      userAgent: 'Mozilla/5.0 Chrome/145.0.0.0',
+    })
+    expect(getSiteAccessHeaders('https://note.com/premium/test')).toEqual({
+      'User-Agent': 'Mozilla/5.0 Chrome/145.0.0.0',
+      Cookie: '_note_session_v5=abc; apay-session-set=def',
+    })
   })
 
   it('classifies 403 as rejected authentication during test', async () => {

@@ -754,6 +754,34 @@ describe('site access settings', () => {
     })
   })
 
+  it('imports note cookie session into a site access profile', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/site-access/import-session',
+      headers: json,
+      payload: {
+        url: 'https://note.com/premium/test',
+        profileName: 'note.com',
+        userAgent: 'Mozilla/5.0 Chrome/145.0.0.0',
+        cookies: [
+          { name: '_note_session_v5', value: 'abc', domain: '.note.com', path: '/' },
+          { name: 'apay-session-set', value: 'def', domain: 'note.com', path: '/' },
+        ],
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      imported_cookie_count: 2,
+      profile: {
+        name: 'note.com',
+        enabled: true,
+        configured: true,
+        targetDomains: expect.arrayContaining(['note.com']),
+      },
+    })
+  })
+
 })
 
 // =========================================================================
