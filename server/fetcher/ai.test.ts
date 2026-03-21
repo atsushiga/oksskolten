@@ -24,6 +24,17 @@ vi.mock('../providers/llm/index.js', () => ({
   }),
 }))
 
+const mockGoogleTranslate = vi.fn()
+const mockDeeplTranslate = vi.fn()
+
+vi.mock('../providers/translate/google-translate.js', () => ({
+  googleTranslate: (...args: unknown[]) => mockGoogleTranslate(...args),
+}))
+
+vi.mock('../providers/translate/deepl.js', () => ({
+  deeplTranslate: (...args: unknown[]) => mockDeeplTranslate(...args),
+}))
+
 import {
   detectLanguage,
   summarizeArticle,
@@ -220,6 +231,25 @@ describe('translateArticle', () => {
     const result = await translateArticle('text')
     expect(result.model).toBe('gpt-4.1')
   })
+
+  it('prefers deepl when no translate.provider is set but a deepl key exists', async () => {
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'api_key.deepl') return 'deepl-key'
+      return null
+    })
+    mockDeeplTranslate.mockResolvedValue({
+      translatedText: 'DeepL translated',
+      characters: 123,
+      monthlyChars: 456,
+    })
+
+    const result = await translateArticle('text')
+
+    expect(mockDeeplTranslate).toHaveBeenCalledWith('text', 'ja')
+    expect(mockCreateMessage).not.toHaveBeenCalled()
+    expect(result.billingMode).toBe('deepl')
+    expect(result.model).toBe('deepl-v2')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -235,5 +265,25 @@ describe('streamTranslateArticle', () => {
     expect(result.fullTextTranslated).toBe('ストリーム翻訳')
     expect(mockStreamMessage).toHaveBeenCalled()
     expect(mockCreateMessage).not.toHaveBeenCalled()
+  })
+
+  it('prefers deepl for streaming when no translate.provider is set but a deepl key exists', async () => {
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'api_key.deepl') return 'deepl-key'
+      return null
+    })
+    mockDeeplTranslate.mockResolvedValue({
+      translatedText: 'DeepL stream translated',
+      characters: 50,
+      monthlyChars: 60,
+    })
+
+    const deltas: string[] = []
+    const result = await streamTranslateArticle('text', (d) => deltas.push(d))
+
+    expect(mockDeeplTranslate).toHaveBeenCalledWith('text', 'ja')
+    expect(mockStreamMessage).not.toHaveBeenCalled()
+    expect(deltas).toEqual(['DeepL stream translated'])
+    expect(result.billingMode).toBe('deepl')
   })
 })

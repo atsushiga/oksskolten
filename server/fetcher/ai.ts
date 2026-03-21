@@ -115,6 +115,16 @@ const translateConfig: AiTaskConfig = {
   buildPrompt: buildTranslatePrompt,
 }
 
+function resolveTranslateProvider(): string {
+  const configured = getSetting('translate.provider')
+  if (configured) return configured
+
+  if (getSetting('api_key.deepl')) return 'deepl'
+  if (getSetting('api_key.google_translate')) return 'google-translate'
+
+  return TASK_DEFAULTS.translate.provider
+}
+
 export async function summarizeArticle(fullText: string): Promise<{ summary: string } & AiTextResult> {
   const r = await runAiTask(summarizeConfig, fullText)
   return { summary: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens, billingMode: r.billingMode, model: r.model }
@@ -129,7 +139,7 @@ export async function streamSummarizeArticle(
 }
 
 export async function translateArticle(fullText: string): Promise<{ fullTextTranslated: string } & AiTextResult> {
-  const provider = getSetting('translate.provider') || TASK_DEFAULTS.translate.provider
+  const provider = resolveTranslateProvider()
   if (provider === 'google-translate') {
     return runGoogleTranslate(fullText)
   }
@@ -144,7 +154,7 @@ export async function streamTranslateArticle(
   fullText: string,
   onText: (delta: string) => void,
 ): Promise<{ fullTextTranslated: string } & AiTextResult> {
-  const provider = getSetting('translate.provider') || TASK_DEFAULTS.translate.provider
+  const provider = resolveTranslateProvider()
   if (provider === 'google-translate') {
     const result = await runGoogleTranslate(fullText)
     onText(result.fullTextTranslated)

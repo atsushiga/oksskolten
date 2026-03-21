@@ -91,7 +91,7 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
       providerValue: settings.translateProvider || '',
       setProvider: (v) => {
         settings.setTranslateProvider(v)
-        settings.setTranslateModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
+        settings.setTranslateModel(getDefaultModel(v))
       },
       modelValue: settings.translateModel || '',
       setModel: settings.setTranslateModel,
@@ -151,11 +151,26 @@ function isTranslateService(provider: string): boolean {
   return (TRANSLATE_SERVICE_PROVIDERS as readonly string[]).includes(provider)
 }
 
+function getDefaultProvider(
+  providers: readonly string[],
+  configuredKeys: Record<string, boolean>,
+  fallback: string,
+): string {
+  return providers.find((provider) => configuredKeys[provider]) || fallback
+}
+
+function getDefaultModel(provider: string): string {
+  if (isTranslateService(provider)) return ''
+  return DEFAULT_MODELS[provider] || DEFAULT_MODELS.anthropic
+}
+
 /* ── Task Model Row ── */
 
 function TaskModelRow({ task, t, configuredKeys, hasAnyTranslateKey }: { task: TaskConfig; t: TFunc; configuredKeys: Record<string, boolean>; hasAnyTranslateKey: boolean }) {
   const hasTranslateServices = !!task.hasTranslateServices
   const currentIsTranslateService = isTranslateService(task.providerValue)
+  const defaultLlmProvider = getDefaultProvider(LLM_TASK_PROVIDERS, configuredKeys, 'anthropic')
+  const defaultTranslateProvider = getDefaultProvider(TRANSLATE_SERVICE_PROVIDERS, configuredKeys, TRANSLATE_SERVICE_PROVIDERS[0])
 
   if (!hasTranslateServices) {
     return (
@@ -173,7 +188,7 @@ function TaskModelRow({ task, t, configuredKeys, hasAnyTranslateKey }: { task: T
       <div className="flex rounded-md bg-bg-subtle p-0.5">
         <button
           type="button"
-          onClick={() => { if (!task.providerValue || currentIsTranslateService) task.setProvider('anthropic') }}
+          onClick={() => { if (!task.providerValue || currentIsTranslateService) task.setProvider(defaultLlmProvider) }}
           className={`flex-1 px-1.5 py-1 text-[11px] rounded transition-colors select-none ${
             task.providerValue && !currentIsTranslateService
               ? 'bg-accent text-accent-text font-medium shadow-sm'
@@ -184,7 +199,7 @@ function TaskModelRow({ task, t, configuredKeys, hasAnyTranslateKey }: { task: T
         </button>
         <button
           type="button"
-          onClick={() => { if (hasAnyTranslateKey && (!task.providerValue || !currentIsTranslateService)) task.setProvider(TRANSLATE_SERVICE_PROVIDERS[0]) }}
+          onClick={() => { if (hasAnyTranslateKey && (!task.providerValue || !currentIsTranslateService)) task.setProvider(defaultTranslateProvider) }}
           disabled={!hasAnyTranslateKey}
           className={`flex-1 px-1.5 py-1 text-[11px] rounded transition-colors select-none ${
             task.providerValue && currentIsTranslateService
