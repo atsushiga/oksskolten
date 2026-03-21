@@ -96,6 +96,7 @@ const httpsUrl = z
 const FromUrlBody = z.object({
   url: httpsUrl,
   title: z.string().optional(),
+  html: z.string().optional(),
   force: z.boolean().optional(),
 })
 
@@ -352,7 +353,9 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
       }
 
       // Fetch content (same pipeline as RSS feeds)
-      const content = await fetchArticleContent(body.url)
+      const content = body.html
+        ? await fetchArticleContent(body.url, { providedHtml: body.html })
+        : await fetchArticleContent(body.url)
 
       const title = body.title || content.title || new URL(body.url).hostname
       const articleId = insertArticle({

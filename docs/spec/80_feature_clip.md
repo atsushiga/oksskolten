@@ -67,6 +67,7 @@ Clip and RSS feeds use the same `fetchArticleContent()` function (`server/fetche
 | `fetchFullText` + automatic FlareSolverr fallback (short/garbage extraction) | Yes | Yes |
 | `isBotBlockPage` detection | Yes | Yes |
 | `detectLanguage` (local CJK ratio) | Yes | Yes |
+| Authenticated site-access profiles (Cookie attached on matching article domains) | Yes | Yes |
 | `requiresJsChallenge` (explicit FlareSolverr via feed-level flag) | Yes (from `feeds.requires_js_challenge`) | No (`undefined` — automatic fallback only) |
 | `listingExcerpt` (CSS Bridge excerpt fallback) | Yes (from RSS item excerpt) | No (not applicable) |
 | `existingArticle` (skip fetch on retry) | Yes (for retry articles) | No (not applicable) |

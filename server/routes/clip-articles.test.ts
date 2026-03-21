@@ -121,6 +121,26 @@ describe('POST /api/articles/from-url', () => {
     expect(res.json().article.title).toBe('My Custom Title')
   })
 
+  it('201: passes provided html to content fetch when supplied', async () => {
+    ensureClipFeed()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/from-url',
+      headers: json,
+      payload: {
+        url: 'https://blog.example.com/post-html',
+        html: '<html><body><article>Provided article body</article></body></html>',
+      },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(mockFetchArticleContent).toHaveBeenCalledWith(
+      'https://blog.example.com/post-html',
+      { providedHtml: '<html><body><article>Provided article body</article></body></html>' },
+    )
+  })
+
   it('201: falls back to hostname when no title', async () => {
     ensureClipFeed()
     mockFetchArticleContent.mockResolvedValue({

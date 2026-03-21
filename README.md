@@ -65,6 +65,7 @@ Because Oksskolten always has the complete text, AI summarization and translatio
 - **Multi-Auth** — Password, Passkey (WebAuthn), and GitHub OAuth — each independently configurable
 - **Smart Feed Management** — Auto-discovery, CSS selector-based feeds (via RSS Bridge), bot bypass (FlareSolverr), and automatic disabling of dead feeds
 - **Article Clipping** — Save any URL as an article, with full content extraction
+- **Authenticated Site Access** — Per-site cookie profiles for paywalled sites, with optional browser-mode fetching for tougher subscriber pages
 - **Theming** — 14 built-in color themes + custom theme import via JSON, 9 article fonts, 8 code highlighting styles
 - **Single Container** — API, SPA, and cron scheduler all run in one Docker container
 
@@ -208,7 +209,7 @@ Extension files:
 4. 拡張のオプション画面を開き、トークンを貼り付けます。あわせて Oksskolten の base URL を指定します。
 
 Note:
-- base URL は、この拡張の `manifest.json` で許可されたもののみ動作します（現状は `https://oksskolten-atsushi.fly.dev` と `http://localhost:3000` が許可されています）。
+- base URL は、この拡張の `manifest.json` で許可されたもののみ動作します。ローカル開発では API サーバの `http://localhost:3000` / `http://127.0.0.1:3000` を使ってください。`localhost:5173` や `http://localhost:5173` を入れても、拡張内では自動的に `3000` 側へ補正されます。
 
 ### Usage
 1. クリップしたい `https://...` ページを開きます。

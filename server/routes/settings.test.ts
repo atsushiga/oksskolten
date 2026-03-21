@@ -27,6 +27,14 @@ vi.mock('../anthropic.js', () => ({
   anthropic: { messages: { stream: vi.fn(), create: vi.fn() } },
 }))
 
+const { mockSafeFetch } = vi.hoisted(() => ({
+  mockSafeFetch: vi.fn(),
+}))
+
+vi.mock('../fetcher/ssrf.js', () => ({
+  safeFetch: (...args: unknown[]) => mockSafeFetch(...args),
+}))
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -36,6 +44,7 @@ const json = { 'content-type': 'application/json' }
 
 beforeEach(async () => {
   setupTestDb()
+  vi.clearAllMocks()
   app = await buildApp()
 })
 
@@ -464,6 +473,287 @@ describe('GET /api/settings/profile — defaults', () => {
     const stored = getSetting('profile.account_name')
     expect(stored).toBe(res.json().account_name)
   })
+})
+
+// =========================================================================
+// Authenticated site access
+// =========================================================================
+
+describe('site access settings', () => {
+  it('saves multiple profiles and encrypted cookies', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [
+          {
+            name: 'note',
+            enabled: true,
+            cookie: 'sessionid=abc123',
+            targetDomains: ['note.com', 'contents.note.com'],
+          },
+          {
+            name: 'nikkei',
+            enabled: true,
+            cookie: 'nikkei_session=xyz',
+            targetDomains: ['nikkei.com'],
+          },
+        ],
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().profiles).toHaveLength(2)
+    expect(res.json().profiles[0]).toMatchObject({
+      name: 'note',
+      enabled: true,
+      configured: true,
+      targetDomains: ['note.com', 'contents.note.com'],
+    })
+    const stored = getSetting('site_access.profiles')
+    expect(stored).toBeTruthy()
+    expect(stored).not.toContain('sessionid=abc123')
+    expect(stored).not.toContain('nikkei_session=xyz')
+  })
+
+  it('rejects invalid target domains', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [{
+          name: 'note',
+          cookie: 'sessionid=abc123',
+          targetDomains: ['https://note.com'],
+        }],
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error).toContain('target domains')
+  })
+
+  it('requires cookie for each profile', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [{
+          name: 'note',
+          enabled: true,
+          targetDomains: ['note.com'],
+        }],
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error).toContain('cookie is required')
+  })
+
+  it('returns profile summaries without exposing cookies', async () => {
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [{
+          name: 'note',
+          enabled: true,
+          cookie: 'sessionid=abc123',
+          targetDomains: ['note.com'],
+        }],
+      },
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/settings/site-access',
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().profiles).toHaveLength(1)
+    expect(res.json().profiles[0]).toMatchObject({
+      name: 'note',
+      enabled: true,
+      configured: true,
+      targetDomains: ['note.com'],
+    })
+    expect(res.body).not.toContain('sessionid=abc123')
+  })
+
+  it('preserves existing cookie when updating profile without cookie field', async () => {
+    const initial = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [{
+          name: 'note',
+          enabled: true,
+          cookie: 'sessionid=abc123',
+          targetDomains: ['note.com'],
+        }],
+      },
+    })
+
+    const profileId = initial.json().profiles[0].id
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [{
+          id: profileId,
+          name: 'note premium',
+          enabled: false,
+          targetDomains: ['note.com', 'contents.note.com'],
+        }],
+      },
+    })
+
+    expect(updated.statusCode).toBe(200)
+    expect(updated.json().profiles[0]).toMatchObject({
+      id: profileId,
+      name: 'note premium',
+      enabled: false,
+      configured: true,
+      targetDomains: ['note.com', 'contents.note.com'],
+    })
+  })
+
+  it('clears site access settings', async () => {
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [{
+          name: 'note',
+          enabled: true,
+          cookie: 'sessionid=abc123',
+          targetDomains: ['note.com'],
+        }],
+      },
+    })
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/settings/site-access',
+    })
+
+    expect(res.statusCode).toBe(204)
+    expect(getSetting('site_access.profiles')).toBeUndefined()
+  })
+
+  it('tests current profile settings and reports success', async () => {
+    mockSafeFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '<html><body>premium article</body></html>',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/site-access/test',
+      headers: json,
+      payload: {
+        profile: {
+          name: 'note',
+          enabled: true,
+          cookie: '_note_session_v5=abc',
+          targetDomains: ['note.com'],
+        },
+        url: 'https://note.com/premium',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      ok: true,
+      code: 'OK',
+      status: 200,
+      url: 'https://note.com/premium',
+    })
+  })
+
+  it('tests current profile settings and detects auth walls', async () => {
+    mockSafeFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '<html><body>sign in to continue</body></html>',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/site-access/test',
+      headers: json,
+      payload: {
+        profile: {
+          name: 'note',
+          enabled: true,
+          cookie: '_note_session_v5=abc',
+          targetDomains: ['note.com'],
+        },
+        url: 'https://note.com/premium',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      ok: false,
+      code: 'AUTH_REQUIRED',
+      status: 200,
+    })
+  })
+
+  it('tests saved profile without resending cookie', async () => {
+    const saved = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/site-access',
+      headers: json,
+      payload: {
+        profiles: [{
+          name: 'note',
+          enabled: true,
+          cookie: '_note_session_v5=abc',
+          targetDomains: ['note.com'],
+        }],
+      },
+    })
+
+    mockSafeFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '<html><body>premium article</body></html>',
+    })
+
+    const profileId = saved.json().profiles[0].id
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/site-access/test',
+      headers: json,
+      payload: {
+        profile: {
+          id: profileId,
+          name: 'note',
+          enabled: true,
+          targetDomains: ['note.com'],
+        },
+        url: 'https://note.com/premium',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      ok: true,
+      code: 'OK',
+      status: 200,
+    })
+  })
+
 })
 
 // =========================================================================

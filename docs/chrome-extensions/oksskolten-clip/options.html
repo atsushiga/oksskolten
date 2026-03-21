@@ -42,7 +42,8 @@
 
     <div class="hint">
       必ず <code>write</code> スコープを持つトークンにしてください。<br />
-      拡張はクリックした時に「アクティブタブのURL」を `POST /api/articles/from-url` に送ります。
+      拡張はクリックした時に、現在タブの URL と表示中 HTML を `POST /api/articles/from-url` に送ります。<br />
+      paywall サイトのフルテキスト取得は保証しません。
     </div>
 
     <button id="save">Save</button>

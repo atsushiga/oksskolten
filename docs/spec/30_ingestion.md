@@ -115,6 +115,8 @@ flowchart TD
 
 The fetch + fallback + language detection logic is encapsulated in a single exported function `fetchArticleContent()` in `server/fetcher.ts`. Both the Cron pipeline (`processArticle`) and the clip save endpoint (`POST /api/articles/from-url`) call this function, ensuring identical behavior for full-text retrieval, FlareSolverr fallback, bot-block detection, and language detection. See [Clip spec](./80_feature_clip.md#shared-fetch-pipeline-with-rss-feeds) for the option differences between RSS and clip invocations.
 
+**Authenticated site access**: When a matching site-access profile is configured in Settings, the article HTML request inside `fetchArticleContent()` sends that profile's Cookie header for both RSS article body retrieval and clip saves. This applies only to article-page fetching (`fetchFullText`) and does **not** change RSS/XML feed fetches themselves.
+
 ### Full-Text Retrieval and Markdown Conversion Pipeline
 
 End-to-end flow from article URL to Markdown text. A multi-stage pipeline combining HTML cleaning (defuddle-based) and Readability that removes noise such as ads, navigation, and tracking attributes before converting to Markdown. Runs entirely locally with no external API dependencies.
@@ -192,7 +194,11 @@ fetchFullText(articleUrl, cleanerConfig?)
 │     headingStyle: 'atx', codeBlockStyle: 'fenced'
 │     Table-related tags are kept as HTML
 │
-└─ 7. Excerpt generation
+├─ 7. Structured-data / bootstrap-JSON fallback
+│     If the visible HTML only contains a short teaser but JSON-LD (`NewsArticle` / `Article`) or embedded bootstrap JSON
+│     (for example `window.__NEXT_DATA__`) includes a longer article body, prefer that body as the extracted full text
+│
+└─ 8. Excerpt generation
       Extract first 200 characters from Markdown text
 ```
 

@@ -12,6 +12,12 @@ import { extractByDotPath } from '../fetcher/article-images.js'
 import { getMonthlyUsage } from '../providers/translate/google-translate.js'
 import { getDeeplMonthlyUsage } from '../providers/translate/deepl.js'
 import { parseOrBadRequest } from '../lib/validation.js'
+import {
+  clearSiteAccessConfig,
+  getSiteAccessConfig,
+  saveSiteAccessConfig,
+  testSiteAccessProfile,
+} from '../site-auth.js'
 
 const ProfileBody = z.object({
   account_name: z.string().optional(),
@@ -21,7 +27,20 @@ const ProfileBody = z.object({
 
 const ProviderParams = z.object({ provider: z.string() })
 const ApiKeyBody = z.object({ apiKey: z.string().optional() })
-
+const SiteAccessProfileBody = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  enabled: z.boolean().optional(),
+  cookie: z.string().optional(),
+  targetDomains: z.array(z.string()).optional(),
+})
+const SiteAccessBody = z.object({
+  profiles: z.array(SiteAccessProfileBody),
+})
+const SiteAccessTestBody = z.object({
+  profile: SiteAccessProfileBody.extend({ name: z.string() }),
+  url: z.string().optional(),
+})
 const PREF_KEYS = [
   'appearance.color_theme',
   'reading.date_mode',
@@ -442,6 +461,72 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       reply.status(502).send({ error: `Healthcheck failed: ${message}` })
+    }
+  })
+
+  // --- Authenticated site access ---
+
+  api.get('/api/settings/site-access', async (_request, reply) => {
+    const config = getSiteAccessConfig()
+    reply.send({
+      profiles: config.profiles.map(profile => ({
+        id: profile.id,
+        name: profile.name,
+        enabled: profile.enabled,
+        configured: profile.configured,
+        targetDomains: profile.targetDomains,
+      })),
+    })
+  })
+
+  api.patch('/api/settings/site-access', { preHandler: [requireJson] }, async (request, reply) => {
+    const body = parseOrBadRequest(SiteAccessBody, request.body, reply)
+    if (!body) return
+
+    try {
+      const config = saveSiteAccessConfig({
+        profiles: body.profiles.map(profile => ({
+          id: profile.id,
+          name: profile.name,
+          enabled: profile.enabled,
+          cookie: profile.cookie,
+          targetDomains: profile.targetDomains,
+        })),
+      })
+      reply.send({
+        profiles: config.profiles.map(profile => ({
+          id: profile.id,
+          name: profile.name,
+          enabled: profile.enabled,
+          configured: profile.configured,
+          targetDomains: profile.targetDomains,
+        })),
+      })
+    } catch (err) {
+      reply.status(400).send({ error: err instanceof Error ? err.message : 'Failed to save site access settings' })
+    }
+  })
+
+  api.delete('/api/settings/site-access', async (_request, reply) => {
+    clearSiteAccessConfig()
+    reply.status(204).send()
+  })
+
+  api.post('/api/settings/site-access/test', { preHandler: [requireJson] }, async (request, reply) => {
+    const body = parseOrBadRequest(SiteAccessTestBody, request.body, reply)
+    if (!body) return
+
+    try {
+      const result = await testSiteAccessProfile({
+        id: body.profile.id,
+        name: body.profile.name,
+        enabled: body.profile.enabled,
+        cookie: body.profile.cookie,
+        targetDomains: body.profile.targetDomains,
+      }, body.url)
+      reply.send(result)
+    } catch (err) {
+      reply.status(400).send({ error: err instanceof Error ? err.message : 'Site access test failed' })
     }
   })
 

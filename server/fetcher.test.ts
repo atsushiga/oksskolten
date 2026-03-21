@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setupTestDb } from './__tests__/helpers/testDb.js'
 import { createFeed, insertArticle, getArticleByUrl, getFeedById, upsertSetting } from './db.js'
+import { saveSiteAccessConfig } from './site-auth.js'
 import type { Feed } from './db.js'
 
 // --- Anthropic mock ---
@@ -236,6 +237,107 @@ describe('detectLanguage', () => {
     const enPart = 'A'.repeat(1000)
     const jaPart = 'あ'.repeat(500)
     expect(detectLanguage(enPart + jaPart)).toBe('en')
+  })
+})
+
+// ==========================================================================
+// authenticated site access
+// ==========================================================================
+
+describe('authenticated site access for article body fetches', () => {
+  it('applies matching site-access cookies during RSS/clip article HTML fetches', async () => {
+    const { fetchArticleContent } = await import('./fetcher.js')
+
+    saveSiteAccessConfig({
+      profiles: [{
+        name: 'note',
+        enabled: true,
+        cookie: '_note_session_v5=abc',
+        targetDomains: ['note.com'],
+      }],
+    })
+
+    mockFetch.mockResolvedValue(mockResponse(articleHtml({ title: 'Premium note article' })))
+
+    const result = await fetchArticleContent('https://note.com/example/n/premium')
+
+    expect(result.fullText).toContain('Premium note article')
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://note.com/example/n/premium',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Cookie: '_note_session_v5=abc',
+        }),
+      }),
+    )
+  })
+
+  it('prefers structured articleBody when visible html only contains a short preview', async () => {
+    const { fetchArticleContent } = await import('./fetcher.js')
+
+    const previewHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Nikkei Premium Article</title>
+  <script type="application/ld+json">
+    ${JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'NewsArticle',
+      headline: 'Nikkei Premium Article',
+      articleBody: 'これは構造化データ内の本文です。'.repeat(80),
+    })}
+  </script>
+</head>
+<body>
+  <article>
+    <h1>Nikkei Premium Article</h1>
+    <p>これは無料で見える短い導入文です。</p>
+  </article>
+</body>
+</html>`
+
+    mockFetch.mockResolvedValue(mockResponse(previewHtml))
+
+    const result = await fetchArticleContent('https://www.nikkei.com/article/test')
+
+    expect(result.fullText).toContain('構造化データ内の本文')
+    expect(result.fullText!.length).toBeGreaterThan(400)
+  })
+
+  it('prefers embedded bootstrap json body when visible html only contains a short preview', async () => {
+    const { fetchArticleContent } = await import('./fetcher.js')
+
+    const embeddedHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Nikkei Embedded Article</title>
+  <script>
+    window.__NEXT_DATA__ = ${JSON.stringify({
+      props: {
+        pageProps: {
+          article: {
+            title: 'Nikkei Embedded Article',
+            body: 'これは埋め込みJSON内の本文です。'.repeat(80),
+          },
+        },
+      },
+    })}
+  </script>
+</head>
+<body>
+  <article>
+    <h1>Nikkei Embedded Article</h1>
+    <p>これは無料で見える導入文です。</p>
+  </article>
+</body>
+</html>`
+
+    mockFetch.mockResolvedValue(mockResponse(embeddedHtml))
+
+    const result = await fetchArticleContent('https://www.nikkei.com/article/embedded')
+
+    expect(result.fullText).toContain('埋め込みJSON内の本文')
+    expect(result.fullText!.length).toBeGreaterThan(400)
   })
 })
 

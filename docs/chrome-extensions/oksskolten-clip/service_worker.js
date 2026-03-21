@@ -19,18 +19,45 @@ function setBadge(text, color) {
   }
 }
 
-function getActiveTabUrl() {
+function normalizeBaseUrl(rawBaseUrl) {
+  const trimmed = String(rawBaseUrl || "").trim();
+  const withScheme = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  const url = new URL(withScheme);
+  const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (isLocalhost && url.port === "5173") url.port = "3000";
+  return url.toString().replace(/\/+$/, "");
+}
+
+function getTabHtml(tabId) {
   return new Promise((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      resolve(tabs?.[0]?.url || null);
-    });
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        func: () => document.documentElement?.outerHTML || null,
+      },
+      (results) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(results?.[0]?.result || null);
+      },
+    );
   });
 }
 
-async function clipUrl(pageUrl, force = false) {
+async function clipUrl(tab, force = false) {
+  const pageUrl = tab?.url || null;
   setBadge("CLIP", "#9ca3af");
   const data = await chrome.storage.local.get([BASE_URL_KEY, API_TOKEN_KEY]);
-  const baseUrl = (data[BASE_URL_KEY] || DEFAULT_BASE_URL).trim().replace(/\/+$/, "");
+  let baseUrl;
+  try {
+    baseUrl = normalizeBaseUrl(data[BASE_URL_KEY] || DEFAULT_BASE_URL);
+  } catch {
+    setBadge("BASE", "#ef4444");
+    notify("Oksskolten Clip", "Base URL is invalid. Use http://localhost:3000 or your deployed URL.");
+    return;
+  }
   const token = (data[API_TOKEN_KEY] || "").trim();
 
   if (!token) {
@@ -45,6 +72,8 @@ async function clipUrl(pageUrl, force = false) {
     return;
   }
 
+  const pageHtml = tab?.id ? await getTabHtml(tab.id) : null;
+
   let res;
   let body = {};
   try {
@@ -54,7 +83,11 @@ async function clipUrl(pageUrl, force = false) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ url: pageUrl, force }),
+      body: JSON.stringify({
+        url: pageUrl,
+        html: typeof pageHtml === "string" && pageHtml.length > 0 ? pageHtml : undefined,
+        force,
+      }),
     });
     body = await res.json().catch(() => ({}));
   } catch (e) {
@@ -71,7 +104,7 @@ async function clipUrl(pageUrl, force = false) {
 
   // RSS側に存在していて move 可能な場合（UIと同じロジック）
   if (res.status === 409 && body?.can_force === true && force === false) {
-    await clipUrl(pageUrl, true);
+    await clipUrl(tab, true);
     return;
   }
 
@@ -80,12 +113,11 @@ async function clipUrl(pageUrl, force = false) {
   notify("Oksskolten Clip failed", msg);
 }
 
-chrome.action.onClicked.addListener(async () => {
-  const tabUrl = await getActiveTabUrl();
-  if (!tabUrl) {
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab?.url) {
     setBadge("NOURL", "#ef4444");
     notify("Oksskolten Clip", "No active tab URL.");
     return;
   }
-  await clipUrl(tabUrl, false);
+  await clipUrl(tab, false);
 });

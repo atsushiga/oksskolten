@@ -1,7 +1,8 @@
 FROM node:22-slim AS base
 
 ENV TZ=UTC
-RUN apt-get update -qq && apt-get install -y -qq ca-certificates curl tzdata \
+RUN apt-get update -qq && apt-get install -y -qq \
+ ca-certificates curl tzdata \
  && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps

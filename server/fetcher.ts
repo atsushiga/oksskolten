@@ -51,6 +51,8 @@ export async function fetchArticleContent(
     listingExcerpt?: string
     /** Existing article data for retry (skips fetch if full_text present) */
     existingArticle?: { full_text: string | null; og_image: string | null; lang: string | null }
+    /** Browser-provided page HTML for clip fallback */
+    providedHtml?: string
   },
 ): Promise<FetchedContent> {
   let fullText: string | null = null
@@ -76,7 +78,10 @@ export async function fetchArticleContent(
     excerpt = options.listingExcerpt
   } else {
     try {
-      const result = await fetchFullText(url, { requiresJsChallenge: options?.requiresJsChallenge })
+      const result = await fetchFullText(url, {
+        requiresJsChallenge: options?.requiresJsChallenge,
+        html: options?.providedHtml,
+      })
       fullText = result.fullText
       ogImage = result.ogImage
       excerpt = result.excerpt

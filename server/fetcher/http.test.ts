@@ -17,10 +17,16 @@ vi.mock('./flaresolverr.js', () => ({
   fetchViaFlareSolverr: (...args: unknown[]) => mockFetchViaFlareSolverr(...args),
 }))
 
+vi.mock('../site-auth.js', () => ({
+  getSiteAccessHeaders: vi.fn(() => ({})),
+}))
+
 import { fetchHtml, USER_AGENT, DEFAULT_TIMEOUT, DISCOVERY_TIMEOUT, PROBE_TIMEOUT } from './http.js'
+import { getSiteAccessHeaders } from '../site-auth.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(getSiteAccessHeaders).mockReturnValue({})
 })
 
 // --- constants ---
@@ -70,6 +76,27 @@ describe('fetchHtml', () => {
     )
   })
 
+  it('passes configured Cookie header for matching authenticated domains', async () => {
+    vi.mocked(getSiteAccessHeaders).mockReturnValue({ Cookie: 'sessionid=abc123' })
+    mockSafeFetch.mockResolvedValue({
+      ok: true,
+      text: async () => '',
+      headers: new Headers(),
+    })
+
+    await fetchHtml('https://note.com/example')
+
+    expect(mockSafeFetch).toHaveBeenCalledWith(
+      'https://note.com/example',
+      expect.objectContaining({
+        headers: {
+          'User-Agent': USER_AGENT,
+          Cookie: 'sessionid=abc123',
+        },
+      }),
+    )
+  })
+
   it('falls back to FlareSolverr on HTTP error', async () => {
     mockSafeFetch.mockResolvedValue({ ok: false, status: 403 })
     mockFetchViaFlareSolverr.mockResolvedValue({
@@ -106,6 +133,14 @@ describe('fetchHtml', () => {
 
     await expect(fetchHtml('https://example.com', { useFlareSolverr: true }))
       .rejects.toThrow('FlareSolverr failed')
+  })
+
+  it('does not use FlareSolverr fallback for authenticated fetches', async () => {
+    vi.mocked(getSiteAccessHeaders).mockReturnValue({ Cookie: 'sessionid=abc123' })
+    mockSafeFetch.mockResolvedValue({ ok: false, status: 403 })
+
+    await expect(fetchHtml('https://note.com/example')).rejects.toThrow('HTTP 403')
+    expect(mockFetchViaFlareSolverr).not.toHaveBeenCalled()
   })
 
   it('uses DEFAULT_TIMEOUT when no timeout specified', async () => {
