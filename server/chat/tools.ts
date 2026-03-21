@@ -18,8 +18,10 @@ import { buildMeiliFilter, meiliSearch } from '../search/client.js'
 import { isSearchReady } from '../search/sync.js'
 import { summarizeArticle, translateArticle } from '../fetcher.js'
 import { getSetting } from '../db/settings.js'
-import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 import { articleUrlToPath } from '../../shared/url.js'
+
+// When the user hasn't set `general.language`, default translations to Japanese.
+const DEFAULT_USER_LANGUAGE = 'ja'
 
 /** Convert a UTC datetime string from SQLite to a local-time ISO-like string */
 function toLocalTime(utc: string | null, timeZone?: string): string | null {
@@ -277,7 +279,7 @@ const translateArticleTool: ToolDef = {
     required: ['article_id'],
   },
   execute: async (input) => {
-    const userLang = getSetting('general.language') || DEFAULT_LANGUAGE
+    const userLang = getSetting('general.language') || DEFAULT_USER_LANGUAGE
     const article = getArticleById(input.article_id as number) as ArticleDetail | undefined
     if (!article) return JSON.stringify({ error: 'Article not found' })
     if (article.full_text_translated && article.translated_lang === userLang) return JSON.stringify({ full_text_translated: article.full_text_translated, cached: true })

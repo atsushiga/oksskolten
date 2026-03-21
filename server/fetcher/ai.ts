@@ -3,7 +3,7 @@ import { getProvider } from '../providers/llm/index.js'
 import { googleTranslate } from '../providers/translate/google-translate.js'
 import { deeplTranslate } from '../providers/translate/deepl.js'
 import { TASK_DEFAULTS } from '../../shared/models.js'
-import { DEFAULT_LANGUAGE, languageName } from '../../shared/lang.js'
+import { languageName } from '../../shared/lang.js'
 
 export type AiBillingMode = 'anthropic' | 'gemini' | 'openai' | 'claude-code' | 'google-translate' | 'deepl'
 
@@ -21,9 +21,13 @@ export function detectLanguage(fullText: string): string {
   return jaCount / sample.length > 0.1 ? 'ja' : 'en'
 }
 
+// When the user hasn't set `general.language`, default summaries to Japanese.
+// (Chat/system prompts may still fall back to `DEFAULT_LANGUAGE`.)
+const DEFAULT_SUMMARIZE_LANGUAGE = 'ja'
+
 
 function buildSummarizePrompt(fullText: string): string {
-  const lang = getSetting('general.language') || DEFAULT_LANGUAGE
+  const lang = getSetting('general.language') || DEFAULT_SUMMARIZE_LANGUAGE
   return `Summarize the following article in ${languageName(lang)}. Follow the format strictly.
 
 ## Format
@@ -43,7 +47,8 @@ ${fullText}`
 }
 
 function buildTranslatePrompt(fullText: string): string {
-  const lang = getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_LANGUAGE
+  // If the user hasn't set any language preferences, default to Japanese.
+  const lang = getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_SUMMARIZE_LANGUAGE
   const targetLang = languageName(lang)
   return `Translate the following article into ${targetLang}.
 Translate every word faithfully — do not summarize, compress, or omit anything.
@@ -155,7 +160,7 @@ export async function streamTranslateArticle(
 }
 
 function getTargetLang(): string {
-  return getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_LANGUAGE
+  return getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_SUMMARIZE_LANGUAGE
 }
 
 async function runGoogleTranslate(fullText: string): Promise<{ fullTextTranslated: string } & AiTextResult> {

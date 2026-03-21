@@ -32,14 +32,13 @@ import { summarizeArticle, translateArticle, streamSummarizeArticle, streamTrans
 import type { AiTextResult } from '../fetcher.js'
 import { archiveArticleImages, isImageArchivingEnabled, deleteArticleImages } from '../fetcher/article-images.js'
 import { getSetting } from '../db/settings.js'
-import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import { dataPath } from '../paths.js'
 import { NumericIdParams, parseOrBadRequest } from '../lib/validation.js'
 
 function getTranslateTargetLang(): string {
-  return getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_LANGUAGE
+  return getSetting('translate.target_lang') || getSetting('general.language') || 'ja'
 }
 
 const DEFAULT_ARTICLE_LIMIT = 20
