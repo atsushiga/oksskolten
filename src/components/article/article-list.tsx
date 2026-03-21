@@ -20,9 +20,12 @@ import { toast } from 'sonner'
 import { Mascot } from '../ui/mascot'
 import { FeedErrorBanner } from '../feed/feed-error-banner'
 import { Skeleton } from '../ui/skeleton'
+import { ActionChip } from '../ui/action-chip'
+import { ConfirmDialog } from '../ui/confirm-dialog'
 import { useKeyboardNavigationContext } from '../../contexts/keyboard-navigation-context'
 import { useKeyboardNavigation } from '../../hooks/use-keyboard-navigation'
-import { apiPatch } from '../../lib/fetcher'
+import { apiPatch, apiPost } from '../../lib/fetcher'
+import { Bookmark, Check, CheckCheck, CheckSquare2, RotateCcw, Square, ThumbsUp, Trash2 } from 'lucide-react'
 import type { ArticleListItem, FeedWithCounts } from '../../../shared/types'
 import type { LayoutName } from '../../data/layouts'
 
@@ -70,6 +73,8 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode, keyboardNavigation } = settings
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null)
   const [noFloor, setNoFloor] = useState(false)
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(() => new Set())
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
   const displayConfig: ArticleDisplayConfig = useMemo(() => ({
     dateMode,
     indicatorStyle,
@@ -129,10 +134,80 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     for (const a of articles) map.set(String(a.id), a)
     return map
   }, [articles])
+  const selectedCount = selectedArticleIds.size
+  const allSelected = articles.length > 0 && articles.every(article => selectedArticleIds.has(article.id))
 
   const isOverlayMode = articleOpenMode === 'overlay'
   // Short debounce after overlay close to prevent Escape from immediately clearing focus
   const escapeDebounceRef = useRef(false)
+
+  const mutateArticles = useCallback((updater: (article: ArticleListItem) => ArticleListItem | null) => {
+    void mutate(
+      pages => pages?.map(page => ({
+        ...page,
+        articles: page.articles.map(updater).filter((article): article is ArticleListItem => article !== null),
+      })),
+      { revalidate: false },
+    )
+  }, [mutate])
+
+  const patchArticleState = useCallback(async (
+    articleId: number,
+    next: Partial<ArticleListItem>,
+    request: () => Promise<unknown>,
+  ) => {
+    const previous = articles.find(article => article.id === articleId)
+    if (!previous) return
+    mutateArticles(article => article.id === articleId ? { ...article, ...next } : article)
+    try {
+      await request()
+      void globalMutate((key: unknown) => typeof key === 'string' && (
+        key.startsWith('/api/feeds') || key.includes('/api/articles')
+      ))
+    } catch {
+      void mutate()
+    }
+  }, [articles, globalMutate, mutate, mutateArticles])
+
+  const toggleBookmark = useCallback((article: ArticleListItem) => {
+    const next = !article.bookmarked_at
+    void patchArticleState(
+      article.id,
+      { bookmarked_at: next ? new Date().toISOString() : null },
+      () => apiPatch(`/api/articles/${article.id}/bookmark`, { bookmarked: next }),
+    )
+  }, [patchArticleState])
+
+  const toggleLike = useCallback((article: ArticleListItem) => {
+    const next = !article.liked_at
+    void patchArticleState(
+      article.id,
+      { liked_at: next ? new Date().toISOString() : null },
+      () => apiPatch(`/api/articles/${article.id}/like`, { liked: next }),
+    )
+  }, [patchArticleState])
+
+  const toggleSeen = useCallback((article: ArticleListItem) => {
+    const next = !article.seen_at
+    void patchArticleState(
+      article.id,
+      { seen_at: next ? (article.seen_at ?? new Date().toISOString()) : null, read_at: next ? article.read_at : null },
+      () => apiPatch(`/api/articles/${article.id}/seen`, { seen: next }),
+    )
+  }, [patchArticleState])
+
+  const toggleArticleSelection = useCallback((articleId: number) => {
+    setSelectedArticleIds(prev => {
+      const next = new Set(prev)
+      if (next.has(articleId)) next.delete(articleId)
+      else next.add(articleId)
+      return next
+    })
+  }, [])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedArticleIds(allSelected ? new Set() : new Set(articles.map(article => article.id)))
+  }, [allSelected, articles])
 
   useKeyboardNavigation({
     items: articleIds,
@@ -159,27 +234,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     onBookmarkToggle: (id) => {
       const article = articleMap.get(id)
       if (!article) return
-      const next = !article.bookmarked_at
-      // Optimistic update: flip bookmarked_at in local SWR cache immediately
-      void mutate(
-        (pages) => pages?.map(page => ({
-          ...page,
-          articles: page.articles.map(a =>
-            String(a.id) === id
-              ? { ...a, bookmarked_at: next ? new Date().toISOString() : null }
-              : a
-          ),
-        })),
-        { revalidate: false },
-      )
-      apiPatch(`/api/articles/${article.id}/bookmark`, { bookmarked: next })
-        .then(() => {
-          void globalMutate((key: string) => typeof key === 'string' && key.startsWith('/api/feeds'))
-        })
-        .catch(() => {
-          // Roll back on failure
-          void mutate()
-        })
+      toggleBookmark(article)
     },
     onOpenExternal: (id) => {
       const article = articleMap.get(id)
@@ -372,11 +427,72 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     setAutoReadIds(new Set())
     setNoFloor(false)
     setShowReadArticles(false)
+    setSelectedArticleIds(new Set())
     setFocusedItemId(null)
   }, [feedId, categoryId, setFocusedItemId])
 
+  const handleBulkSeen = useCallback(async (seen: boolean) => {
+    const ids = [...selectedArticleIds]
+    if (ids.length === 0) return
+    const selected = new Set(ids)
+    mutateArticles(article => (
+      selected.has(article.id)
+        ? { ...article, seen_at: seen ? (article.seen_at ?? new Date().toISOString()) : null, read_at: seen ? article.read_at : null }
+        : article
+    ))
+    setSelectedArticleIds(new Set())
+    try {
+      await apiPost('/api/articles/batch-seen', { ids, seen })
+      void globalMutate((key: unknown) => typeof key === 'string' && (
+        key.startsWith('/api/feeds') || key.includes('/api/articles')
+      ))
+    } catch {
+      void mutate()
+    }
+  }, [globalMutate, mutate, mutateArticles, selectedArticleIds])
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = [...selectedArticleIds]
+    if (ids.length === 0) return
+    const selected = new Set(ids)
+    mutateArticles(article => selected.has(article.id) ? null : article)
+    setBulkDeleteConfirmOpen(false)
+    setSelectedArticleIds(new Set())
+    try {
+      await apiPost('/api/articles/batch-delete', { ids })
+      void globalMutate((key: unknown) => typeof key === 'string' && (
+        key.startsWith('/api/feeds') || key.includes('/api/articles')
+      ))
+    } catch {
+      void mutate()
+    }
+  }, [globalMutate, mutate, mutateArticles, selectedArticleIds])
+
   return (
     <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
+      <div className="px-4 md:px-6 pt-3 flex flex-wrap items-center gap-2">
+        <ActionChip onClick={handleSelectAll} aria-label={allSelected ? t('articles.clearSelection') : t('articles.selectAll')}>
+          {allSelected ? <CheckSquare2 className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+          {allSelected ? t('articles.clearSelection') : t('articles.selectAll')}
+        </ActionChip>
+        {selectedCount > 0 && (
+          <>
+            <ActionChip active>{t('articles.selectedCount', { count: String(selectedCount) })}</ActionChip>
+            <ActionChip onClick={() => { void handleBulkSeen(true) }}>
+              <CheckCheck className="w-3.5 h-3.5" />
+              {t('article.markRead')}
+            </ActionChip>
+            <ActionChip onClick={() => { void handleBulkSeen(false) }}>
+              <RotateCcw className="w-3.5 h-3.5" />
+              {t('article.markUnread')}
+            </ActionChip>
+            <ActionChip onClick={() => setBulkDeleteConfirmOpen(true)}>
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('article.delete')}
+            </ActionChip>
+          </>
+        )}
+      </div>
       {isTouchDevice && <PullToRefresh onRefresh={async () => {
         if (feedId) {
           const result = await startFeedFetch(feedId)
@@ -470,7 +586,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
               data-article-id={article.id}
               data-article-unread={article.seen_at == null && !isAutoRead ? '1' : '0'}
               aria-selected={isKbFocused || undefined}
-              className={layout === 'magazine' && index === 0 ? 'col-span-full' : ''}
+              className={`${layout === 'magazine' && index === 0 ? 'col-span-full' : ''} group/article`}
               style={isKbFocused ? {
                 borderLeft: '2px solid var(--color-accent)',
                 backgroundColor: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
@@ -481,6 +597,38 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
                 }
               }}
             >
+              <div className="px-4 md:px-6 pt-2 flex flex-wrap items-center gap-2">
+                <ActionChip
+                  active={selectedArticleIds.has(article.id)}
+                  onClick={() => toggleArticleSelection(article.id)}
+                  aria-label={selectedArticleIds.has(article.id) ? t('articles.clearSelection') : t('articles.selectAll')}
+                  className={selectedArticleIds.has(article.id) ? '' : 'opacity-0 pointer-events-none transition-opacity group-hover/article:opacity-100 group-hover/article:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'}
+                >
+                  {selectedArticleIds.has(article.id) ? <CheckSquare2 className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                </ActionChip>
+                <ActionChip
+                  active={!!effectiveArticle.bookmarked_at}
+                  onClick={() => toggleBookmark(effectiveArticle)}
+                  aria-pressed={!!effectiveArticle.bookmarked_at}
+                  aria-label={effectiveArticle.bookmarked_at ? t('article.removeBookmark') : t('article.addBookmark')}
+                  tooltip={effectiveArticle.bookmarked_at ? t('article.removeBookmark') : t('article.addBookmark')}
+                >
+                  <Bookmark className="w-3.5 h-3.5" fill={effectiveArticle.bookmarked_at ? 'currentColor' : 'none'} />
+                </ActionChip>
+                <ActionChip
+                  active={!!effectiveArticle.liked_at}
+                  onClick={() => toggleLike(effectiveArticle)}
+                  aria-pressed={!!effectiveArticle.liked_at}
+                  aria-label={effectiveArticle.liked_at ? t('article.removeLike') : t('article.addLike')}
+                  tooltip={effectiveArticle.liked_at ? t('article.removeLike') : t('article.addLike')}
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" fill={effectiveArticle.liked_at ? 'currentColor' : 'none'} />
+                </ActionChip>
+                <ActionChip onClick={() => toggleSeen(effectiveArticle)}>
+                  {effectiveArticle.seen_at ? <RotateCcw className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+                  {effectiveArticle.seen_at ? t('article.markUnread') : t('article.markRead')}
+                </ActionChip>
+              </div>
               {isTouchDevice ? (
                 <SwipeableArticleCard {...cardProps} />
               ) : (
@@ -530,6 +678,16 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
         escapeDebounceRef.current = true
         setTimeout(() => { escapeDebounceRef.current = false }, 100)
       }} />
+      {bulkDeleteConfirmOpen && (
+        <ConfirmDialog
+          title={t('articles.bulkDelete', { count: String(selectedCount) })}
+          message={t('articles.bulkDeleteConfirm', { count: String(selectedCount) })}
+          confirmLabel={t('article.delete')}
+          danger
+          onConfirm={() => { void handleBulkDelete() }}
+          onCancel={() => setBulkDeleteConfirmOpen(false)}
+        />
+      )}
     </main>
   )
 })

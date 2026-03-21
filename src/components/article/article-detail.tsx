@@ -55,8 +55,8 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   )
   const { viewMode, setViewMode, translating, translatingText, fullTextTranslated, handleTranslate, translatingHtml, error: translateError } = useTranslate(translateInput, metrics)
   const {
-    isBookmarked, isLiked, archivingImages, deleteConfirmOpen, setDeleteConfirmOpen,
-    toggleBookmark, toggleLike, handleArchiveImages, handleDelete,
+    isBookmarked, isLiked, isSeen, archivingImages, deleteConfirmOpen, setDeleteConfirmOpen,
+    toggleBookmark, toggleLike, toggleSeen, handleArchiveImages, handleDelete,
   } = useArticleActions(article, articleKey)
   const chat = useChatInline(article?.id ?? 0)
 
@@ -204,9 +204,11 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
         onSummarize={handleSummarize}
         isBookmarked={!!isBookmarked}
         isLiked={isLiked}
+        isSeen={isSeen}
         archivingImages={archivingImages}
         onToggleBookmark={toggleBookmark}
         onToggleLike={toggleLike}
+        onToggleSeen={toggleSeen}
         onArchiveImages={handleArchiveImages}
         onDelete={() => setDeleteConfirmOpen(true)}
       />

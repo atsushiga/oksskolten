@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ActionChip } from '../ui/action-chip'
 import { ChatInlineTrigger } from '../chat/chat-inline'
-import { Bookmark, ThumbsUp, CloudUpload, CloudCheck, Trash2, Languages, Sparkles } from 'lucide-react'
+import { Bookmark, ThumbsUp, CloudUpload, CloudCheck, Trash2, Languages, Sparkles, RotateCcw, Check } from 'lucide-react'
 import { useI18n } from '../../lib/i18n'
 import type { ArticleDetail } from '../../../shared/types'
 
@@ -19,9 +19,11 @@ interface ArticleToolbarProps {
   onSummarize: () => void
   isBookmarked: boolean
   isLiked: boolean
+  isSeen: boolean
   archivingImages: boolean
   onToggleBookmark: () => void
   onToggleLike: () => void
+  onToggleSeen: () => void
   onArchiveImages: () => void
   onDelete: () => void
 }
@@ -40,9 +42,11 @@ export function ArticleToolbar({
   onSummarize,
   isBookmarked,
   isLiked,
+  isSeen,
   archivingImages,
   onToggleBookmark,
   onToggleLike,
+  onToggleSeen,
   onArchiveImages,
   onDelete,
 }: ArticleToolbarProps) {
@@ -80,17 +84,21 @@ export function ArticleToolbar({
           {t('article.translate')}
         </ActionChip>
       )}
-      <ActionChip active={!!isBookmarked} onClick={onToggleBookmark} aria-pressed={!!isBookmarked} tooltip={isBookmarked ? t('article.removeBookmark') : t('article.addBookmark')}>
+      <ActionChip active={!!isBookmarked} onClick={onToggleBookmark} aria-pressed={!!isBookmarked} aria-label={isBookmarked ? t('article.removeBookmark') : t('article.addBookmark')} tooltip={isBookmarked ? t('article.removeBookmark') : t('article.addBookmark')}>
         <Bookmark
           className="w-3.5 h-3.5"
           fill={isBookmarked ? 'currentColor' : 'none'}
         />
       </ActionChip>
-      <ActionChip active={isLiked} onClick={onToggleLike} aria-pressed={isLiked} tooltip={isLiked ? t('article.removeLike') : t('article.addLike')}>
+      <ActionChip active={isLiked} onClick={onToggleLike} aria-pressed={isLiked} aria-label={isLiked ? t('article.removeLike') : t('article.addLike')} tooltip={isLiked ? t('article.removeLike') : t('article.addLike')}>
         <ThumbsUp
           className="w-3.5 h-3.5"
           fill={isLiked ? 'currentColor' : 'none'}
         />
+      </ActionChip>
+      <ActionChip onClick={onToggleSeen} tooltip={isSeen ? t('article.markUnread') : t('article.markRead')}>
+        {isSeen ? <RotateCcw className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+        {isSeen ? t('article.markUnread') : t('article.markRead')}
       </ActionChip>
       {article.imageArchivingEnabled && article.full_text && /(<img\s|!\[)/.test(article.full_text) && !article.images_archived_at && !archivingImages && (
         <ActionChip onClick={onArchiveImages} tooltip={t('article.archiveImages')}>

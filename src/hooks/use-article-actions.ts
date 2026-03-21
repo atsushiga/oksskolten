@@ -10,16 +10,19 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
 
   const [optimisticBookmark, setOptimisticBookmark] = useState<boolean | undefined>(undefined)
   const [optimisticLiked, setOptimisticLiked] = useState<string | null | undefined>(undefined)
+  const [optimisticSeen, setOptimisticSeen] = useState<boolean | undefined>(undefined)
   const [archivingImages, setArchivingImages] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const isBookmarked = optimisticBookmark !== undefined ? optimisticBookmark : !!article?.bookmarked_at
   const isLiked = optimisticLiked !== undefined ? !!optimisticLiked : !!article?.liked_at
+  const isSeen = optimisticSeen !== undefined ? optimisticSeen : !!article?.seen_at
 
   // Reset optimistic state when article changes
   useEffect(() => {
     setOptimisticBookmark(undefined)
     setOptimisticLiked(undefined)
+    setOptimisticSeen(undefined)
   }, [article?.id])
 
   const revalidateLists = useCallback(() => {
@@ -66,6 +69,27 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
     }
   }, [article, articleKey, isLiked, globalMutate, revalidateLists])
 
+  const toggleSeen = useCallback(async () => {
+    if (!article) return
+    const next = !isSeen
+    setOptimisticSeen(next)
+    void globalMutate(articleKey, (current: ArticleDetail | undefined) => (
+      current ? {
+        ...current,
+        seen_at: next ? (current.seen_at ?? new Date().toISOString()) : null,
+        read_at: next ? current.read_at : null,
+      } : current
+    ), false)
+    try {
+      await apiPatch(`/api/articles/${article.id}/seen`, { seen: next })
+      void globalMutate(articleKey)
+      revalidateLists()
+    } catch {
+      setOptimisticSeen(undefined)
+      void globalMutate(articleKey)
+    }
+  }, [article, articleKey, globalMutate, isSeen, revalidateLists])
+
   const handleArchiveImages = useCallback(async () => {
     if (!article || archivingImages) return
     setArchivingImages(true)
@@ -97,11 +121,13 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
   return {
     isBookmarked,
     isLiked,
+    isSeen,
     archivingImages,
     deleteConfirmOpen,
     setDeleteConfirmOpen,
     toggleBookmark,
     toggleLike,
+    toggleSeen,
     handleArchiveImages,
     handleDelete,
   }

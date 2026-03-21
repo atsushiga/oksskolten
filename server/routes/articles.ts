@@ -11,6 +11,7 @@ import {
   getArticlesByIds,
   markArticleSeen,
   markArticlesSeen,
+  markArticlesSeenState,
   recordArticleRead,
   markArticleBookmarked,
   markArticleLiked,
@@ -20,6 +21,7 @@ import {
   getClipFeed,
   insertArticle,
   deleteArticle,
+  deleteArticles,
   getSimilarArticles,
   getDb,
   type ArticleDetail,
@@ -104,6 +106,10 @@ const SeenBody = z.object({ seen: z.boolean({ message: 'seen must be a boolean' 
 const BookmarkBody = z.object({ bookmarked: z.boolean({ message: 'bookmarked must be a boolean' }) })
 const LikeBody = z.object({ liked: z.boolean({ message: 'liked must be a boolean' }) })
 const BatchSeenBody = z.object({
+  ids: z.array(z.number()).min(1, 'ids must be a non-empty array').max(MAX_BATCH_SEEN, `Maximum ${MAX_BATCH_SEEN} ids per request`),
+  seen: z.boolean().optional(),
+})
+const BatchDeleteBody = z.object({
   ids: z.array(z.number()).min(1, 'ids must be a non-empty array').max(MAX_BATCH_SEEN, `Maximum ${MAX_BATCH_SEEN} ids per request`),
 })
 const StreamQuery = z.object({ stream: z.string().optional() })
@@ -432,8 +438,28 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = parseOrBadRequest(BatchSeenBody, request.body, reply)
       if (!body) return
-      const result = markArticlesSeen(body.ids)
+      const result = body.seen === false ? markArticlesSeenState(body.ids, false) : markArticlesSeen(body.ids)
       reply.send(result)
+    },
+  )
+
+  api.post(
+    '/api/articles/batch-delete',
+    { preHandler: [requireJson] },
+    async (request, reply) => {
+      const body = parseOrBadRequest(BatchDeleteBody, request.body, reply)
+      if (!body) return
+      for (const id of body.ids) {
+        const article = getArticleById(id)
+        if (article?.images_archived_at) {
+          try {
+            deleteArticleImages(id)
+          } catch (err) {
+            request.log.error(err, 'Failed to delete archived images')
+          }
+        }
+      }
+      reply.send(deleteArticles(body.ids))
     },
   )
 

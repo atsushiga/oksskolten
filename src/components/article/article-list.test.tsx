@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { LocaleContext } from '../../lib/i18n'
+import { TooltipProvider } from '../ui/tooltip'
 import type { ArticleListItem } from '../../../shared/types'
 
 // --- Mocks ---
@@ -40,9 +41,13 @@ vi.mock('../feed/feed-metrics-bar', () => ({
   FeedMetricsBar: ({ feed }: any) => <div data-testid="metrics-bar">{feed.name}</div>,
 }))
 
+const mockApiPatch = vi.fn<(...args: any[]) => Promise<any>>(() => Promise.resolve())
+const mockApiPost = vi.fn<(...args: any[]) => Promise<any>>(() => Promise.resolve())
+
 vi.mock('../../lib/fetcher', () => ({
   fetcher: vi.fn(),
-  apiPatch: vi.fn(() => Promise.resolve()),
+  apiPatch: (...args: unknown[]) => mockApiPatch(...args),
+  apiPost: (...args: unknown[]) => mockApiPost(...args),
 }))
 
 vi.mock('../../lib/markSeenWithQueue', () => ({
@@ -176,12 +181,14 @@ function renderArticleList(initialPath = '/inbox') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <LocaleContext.Provider value={{ locale: 'en', setLocale: vi.fn() }}>
-        <Routes>
-          <Route element={<OutletWrapper />}>
-            <Route path="feeds/:feedId" element={<ArticleList />} />
-            <Route path="*" element={<ArticleList />} />
-          </Route>
-        </Routes>
+        <TooltipProvider>
+          <Routes>
+            <Route element={<OutletWrapper />}>
+              <Route path="feeds/:feedId" element={<ArticleList />} />
+              <Route path="*" element={<ArticleList />} />
+            </Route>
+          </Routes>
+        </TooltipProvider>
       </LocaleContext.Provider>
     </MemoryRouter>,
   )
@@ -190,6 +197,10 @@ function renderArticleList(initialPath = '/inbox') {
 describe('ArticleList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockApiPatch.mockReset()
+    mockApiPatch.mockResolvedValue(undefined)
+    mockApiPost.mockReset()
+    mockApiPost.mockResolvedValue(undefined)
     swrFeedsData = undefined
     mockSettings.autoMarkRead = 'off' as any
     // Stub IntersectionObserver for tests that enable autoMarkRead
@@ -477,5 +488,56 @@ describe('ArticleList', () => {
     expect(pulses.length).toBeGreaterThan(0)
 
     vi.unstubAllGlobals()
+  })
+
+  it('renders article action buttons and toggles bookmark', async () => {
+    swrInfiniteReturn = {
+      data: [{ articles: [makeArticle({ id: 1, title: 'Action Article' })], total: 1, has_more: false }],
+      error: undefined,
+      size: 1,
+      setSize: vi.fn(),
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+    }
+    renderArticleList()
+
+    fireEvent.click(screen.getByLabelText('Read later'))
+
+    await waitFor(() => {
+      expect(mockApiPatch).toHaveBeenCalledWith('/api/articles/1/bookmark', { bookmarked: true })
+    })
+    expect(screen.getByLabelText('Read later')).toBeTruthy()
+    expect(screen.getByLabelText('Like')).toBeTruthy()
+    expect(screen.getByText('Mark as read')).toBeTruthy()
+  })
+
+  it('shows bulk action bar after selecting articles', async () => {
+    swrInfiniteReturn = {
+      data: [{
+        articles: [
+          makeArticle({ id: 1, title: 'First' }),
+          makeArticle({ id: 2, title: 'Second' }),
+        ],
+        total: 2,
+        has_more: false,
+      }],
+      error: undefined,
+      size: 1,
+      setSize: vi.fn(),
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+    }
+    renderArticleList()
+
+    fireEvent.click(screen.getAllByLabelText('Select all')[1])
+
+    expect(screen.getByText('1 selected')).toBeTruthy()
+    fireEvent.click(screen.getByText('Mark as unread'))
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/api/articles/batch-seen', { ids: [1], seen: false })
+    })
   })
 })

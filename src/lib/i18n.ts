@@ -143,8 +143,15 @@ const dict = {
   'article.removeBookmark': { ja: '後で読むを解除', en: 'Remove from read later' },
   'article.addLike': { ja: 'いいね', en: 'Like' },
   'article.removeLike': { ja: 'いいねを解除', en: 'Unlike' },
+  'article.markRead': { ja: '既読にする', en: 'Mark as read' },
+  'article.markUnread': { ja: '未読にする', en: 'Mark as unread' },
   'article.delete': { ja: '削除', en: 'Delete' },
   'article.deleteConfirm': { ja: 'この記事を削除しますか？', en: 'Delete this article?' },
+  'articles.selectAll': { ja: 'すべて選択', en: 'Select all' },
+  'articles.clearSelection': { ja: '選択解除', en: 'Clear selection' },
+  'articles.selectedCount': { ja: '${count} 件選択中', en: '${count} selected' },
+  'articles.bulkDelete': { ja: '${count} 件の記事を削除', en: 'Delete ${count} articles' },
+  'articles.bulkDeleteConfirm': { ja: '${count} 件の記事を削除しますか？', en: 'Delete ${count} articles?' },
 
   // AddModal (unified)
   'modal.addNew': { ja: 'はじめる', en: 'Get Started' },

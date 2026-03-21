@@ -613,6 +613,34 @@ describe('POST /api/articles/batch-seen', () => {
     expect(res.json().updated).toBe(2)
   })
 
+  it('marks multiple articles as unseen', async () => {
+    const feed = seedFeed()
+    const id1 = seedArticle(feed.id)
+    const id2 = seedArticle(feed.id)
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/articles/${id1}/seen`,
+      headers: json,
+      payload: { seen: true },
+    })
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/articles/${id2}/seen`,
+      headers: json,
+      payload: { seen: true },
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/batch-seen',
+      headers: json,
+      payload: { ids: [id1, id2], seen: false },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().updated).toBe(2)
+  })
+
   it('returns 400 for empty array', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -633,6 +661,24 @@ describe('POST /api/articles/batch-seen', () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json().error).toMatch(/100/)
+  })
+})
+
+describe('POST /api/articles/batch-delete', () => {
+  it('deletes multiple articles', async () => {
+    const feed = seedFeed()
+    const id1 = seedArticle(feed.id)
+    const id2 = seedArticle(feed.id)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/batch-delete',
+      headers: json,
+      payload: { ids: [id1, id2] },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().deleted).toBe(2)
   })
 })
 

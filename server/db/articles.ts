@@ -243,12 +243,25 @@ export function markArticleSeen(
 
 export function markArticlesSeen(ids: number[]): { updated: number } {
   if (ids.length === 0) return { updated: 0 }
+  return markArticlesSeenState(ids, true)
+}
+
+export function markArticlesSeenState(ids: number[], seen: boolean): { updated: number } {
+  if (ids.length === 0) return { updated: 0 }
   const placeholders = ids.map(() => '?').join(',')
-  const result = getDb().prepare(
-    `UPDATE articles SET seen_at = datetime('now') WHERE id IN (${placeholders}) AND seen_at IS NULL`,
-  ).run(...ids)
+  const result = seen
+    ? getDb().prepare(
+        `UPDATE articles SET seen_at = datetime('now') WHERE id IN (${placeholders}) AND seen_at IS NULL`,
+      ).run(...ids)
+    : getDb().prepare(
+        `UPDATE articles SET seen_at = NULL, read_at = NULL WHERE id IN (${placeholders}) AND seen_at IS NOT NULL`,
+      ).run(...ids)
   if (result.changes > 0) {
-    syncArticleFiltersToSearch(ids.map(id => ({ id, is_unread: false })))
+    syncArticleFiltersToSearch(ids.map(id => ({ id, is_unread: !seen })))
+    if (!seen) {
+      ids.forEach(updateScoreDb)
+      ids.forEach(syncScoreToSearch)
+    }
   }
   return { updated: result.changes }
 }
@@ -574,6 +587,24 @@ export function deleteArticle(id: number): boolean {
   const result = getDb().prepare('DELETE FROM articles WHERE id = ?').run(id)
   if (result.changes > 0) deleteArticleFromSearch(id)
   return result.changes > 0
+}
+
+export function deleteArticles(ids: number[]): { deleted: number } {
+  if (ids.length === 0) return { deleted: 0 }
+  const execute = getDb().transaction((articleIds: number[]) => {
+    let deleted = 0
+    const stmt = getDb().prepare('DELETE FROM articles WHERE id = ?')
+    for (const id of articleIds) {
+      const result = stmt.run(id)
+      if (result.changes > 0) deleted += 1
+    }
+    return deleted
+  })
+  const deleted = execute(ids)
+  if (deleted > 0) {
+    ids.forEach(deleteArticleFromSearch)
+  }
+  return { deleted }
 }
 
 export function getReadingStats(opts?: {
