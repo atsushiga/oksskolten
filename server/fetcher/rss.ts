@@ -412,6 +412,37 @@ export interface DiscoverCallbacks {
   onFlareSolverr?: (status: 'running' | 'done', found?: boolean) => void
 }
 
+function extractFeedHrefFromHtml(doc: Document, pageUrl: string): string | null {
+  const alternateLinks = doc.querySelectorAll(
+    'link[rel="alternate"][type="application/rss+xml"], link[rel="alternate"][type="application/atom+xml"]',
+  )
+  for (const link of alternateLinks) {
+    const href = link.getAttribute('href')
+    if (href) return new URL(href, pageUrl).toString()
+  }
+
+  const anchors = doc.querySelectorAll('a[href]')
+  for (const anchor of anchors) {
+    const href = anchor.getAttribute('href')
+    if (!href) continue
+
+    const text = (anchor.textContent ?? '').trim().toLowerCase()
+    const title = (anchor.getAttribute('title') ?? '').trim().toLowerCase()
+    const rel = (anchor.getAttribute('rel') ?? '').trim().toLowerCase()
+    const absoluteUrl = new URL(href, pageUrl).toString()
+    const pathname = new URL(absoluteUrl).pathname.toLowerCase()
+
+    const hints = [text, title, rel, href.toLowerCase(), pathname]
+    const looksLikeFeed =
+      hints.some(value => /\b(rss|atom|feed)\b/.test(value)) ||
+      pathname.endsWith('.xml') && hints.some(value => value.includes('rss') || value.includes('atom') || value.includes('feed'))
+
+    if (looksLikeFeed) return absoluteUrl
+  }
+
+  return null
+}
+
 export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallbacks): Promise<{ rssUrl: string | null; title: string | null; usedFlareSolverr: boolean }> {
   let rssUrl: string | null = null
   let pageTitle: string | null = null
@@ -437,16 +468,7 @@ export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallba
 
     pageTitle = doc.querySelector('title')?.textContent?.trim() || null
 
-    const links = doc.querySelectorAll(
-      'link[rel="alternate"][type="application/rss+xml"], link[rel="alternate"][type="application/atom+xml"]',
-    )
-    for (const link of links) {
-      const href = link.getAttribute('href')
-      if (href) {
-        rssUrl = new URL(href, blogUrl).toString()
-        break
-      }
-    }
+    rssUrl = extractFeedHrefFromHtml(doc, blogUrl)
 
     if (result.usedFlareSolverr) callbacks?.onFlareSolverr?.('done', !!rssUrl)
   } catch {

@@ -133,6 +133,19 @@ function htmlWithRssLink(href: string, title: string): string {
 </html>`
 }
 
+function htmlWithFooterRssAnchor(href: string, title: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>${title}</title>
+</head>
+<body>
+  <main><p>News page</p></main>
+  <footer><a href="${href}">RSS</a></footer>
+</body>
+</html>`
+}
+
 function htmlWithoutRss(title: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -1592,6 +1605,24 @@ describe('discoverRssUrl — additional branches', () => {
     expect(result.rssUrl).toBe('https://blog.example.com/feed.xml')
     // Falls back to page title
     expect(result.title).toBe('My Blog Title')
+  })
+
+  it('detects feed from footer RSS anchor when rel=alternate is absent', async () => {
+    const blogHtml = htmlWithFooterRssAnchor('/news/rss.xml', 'OpenAI News')
+    const rssXml = rss20Xml('OpenAI News Feed', [])
+
+    mockFetch.mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = url.toString()
+      if (u === 'https://openai.com/ja-JP/news/') return Promise.resolve(mockResponse(blogHtml))
+      if (u === 'https://openai.com/news/rss.xml' && !init?.method) {
+        return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      }
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    const result = await discoverRssUrl('https://openai.com/ja-JP/news/')
+    expect(result.rssUrl).toBe('https://openai.com/news/rss.xml')
+    expect(result.title).toBe('OpenAI News Feed')
   })
 
   it('fetchFeedTitle extracts Atom feed title', async () => {
