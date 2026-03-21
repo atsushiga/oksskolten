@@ -390,6 +390,54 @@ describe('GET /api/articles?read=1', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Commenting
+// ---------------------------------------------------------------------------
+
+describe('PATCH /api/articles/:id/comment', () => {
+  it('saves a comment and marks the article as commented', async () => {
+    const feed = seedFeed()
+    const artId = seedArticle(feed.id)
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/articles/${artId}/comment`,
+      headers: json,
+      payload: { comment: 'Useful summary' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().comment).toBe('Useful summary')
+    expect(res.json().comment_updated_at).toBeTruthy()
+
+    const listRes = await app.inject({ method: 'GET', url: '/api/articles?commented=1' })
+    expect(listRes.json().articles).toHaveLength(1)
+    expect(listRes.json().articles[0].comment).toBe('Useful summary')
+  })
+
+  it('clears the comment when the payload is blank', async () => {
+    const feed = seedFeed()
+    const artId = seedArticle(feed.id)
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/articles/${artId}/comment`,
+      headers: json,
+      payload: { comment: 'Existing note' },
+    })
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/articles/${artId}/comment`,
+      headers: json,
+      payload: { comment: '   ' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().comment).toBeNull()
+    expect(res.json().comment_updated_at).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // total_all: distinguish "no articles" from "all read"
 // ---------------------------------------------------------------------------
 

@@ -130,7 +130,7 @@ function OutletWrapper() {
 
 function renderFeedList(
   props: Partial<typeof defaultProps> = {},
-  feedsData?: { feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null },
+  feedsData?: { feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; comment_count?: number; clip_feed_id: number | null },
   categoriesData?: { categories: Category[] },
   initialPath = '/inbox',
 ) {
@@ -162,7 +162,7 @@ describe('FeedList', () => {
     vi.clearAllMocks()
   })
 
-  it('renders nav items: Inbox, Read Later, Liked, Read', () => {
+  it('renders nav items: Inbox, Read Later, Liked, Read, Commented', () => {
     renderFeedList(
       {},
       { feeds: [], bookmark_count: 0, like_count: 0, clip_feed_id: null },
@@ -172,6 +172,7 @@ describe('FeedList', () => {
     expect(screen.getByText('Read Later')).toBeTruthy()
     expect(screen.getByText('Liked')).toBeTruthy()
     expect(screen.getByText('Read')).toBeTruthy()
+    expect(screen.getByText('Commented')).toBeTruthy()
   })
 
   it('shows total unread badge on Inbox', () => {

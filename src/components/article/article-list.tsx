@@ -22,10 +22,11 @@ import { FeedErrorBanner } from '../feed/feed-error-banner'
 import { Skeleton } from '../ui/skeleton'
 import { ActionChip } from '../ui/action-chip'
 import { ConfirmDialog } from '../ui/confirm-dialog'
+import { ArticleCommentDialog } from './article-comment-dialog'
 import { useKeyboardNavigationContext } from '../../contexts/keyboard-navigation-context'
 import { useKeyboardNavigation } from '../../hooks/use-keyboard-navigation'
 import { apiPatch, apiPost } from '../../lib/fetcher'
-import { Bookmark, Check, CheckCheck, CheckSquare2, RotateCcw, Square, ThumbsUp, Trash2 } from 'lucide-react'
+import { Bookmark, Check, CheckCheck, CheckSquare2, MessageSquare, RotateCcw, Square, ThumbsUp, Trash2 } from 'lucide-react'
 import type { ArticleListItem, FeedWithCounts } from '../../../shared/types'
 import type { LayoutName } from '../../data/layouts'
 
@@ -57,8 +58,9 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const isBookmarks = location.pathname === '/bookmarks'
   const isLikes = location.pathname === '/likes'
   const isHistory = location.pathname === '/history'
+  const isComments = location.pathname === '/comments'
   const isClips = location.pathname === '/clips'
-  const isCollectionView = isBookmarks || isLikes || isHistory || isClips
+  const isCollectionView = isBookmarks || isLikes || isHistory || isComments || isClips
 
   const { data: feedsData } = useSWR<{ feeds: FeedWithCounts[] }>('/api/feeds', fetcher)
   const feedId = feedIdParam ? Number(feedIdParam) : (isClips && clipFeedId ? clipFeedId : undefined)
@@ -69,12 +71,15 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const unreadOnly = isInbox || (categoryUnreadOnly && !showReadArticles)
   const bookmarkedOnly = isBookmarks
   const likedOnly = isLikes
+  const commentedOnly = isComments
   const readOnly = isHistory
   const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode, keyboardNavigation } = settings
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null)
   const [noFloor, setNoFloor] = useState(false)
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(() => new Set())
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
+  const [commentDialogArticle, setCommentDialogArticle] = useState<ArticleListItem | null>(null)
+  const [commentSaving, setCommentSaving] = useState(false)
   const displayConfig: ArticleDisplayConfig = useMemo(() => ({
     dateMode,
     indicatorStyle,
@@ -93,6 +98,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     if (unreadOnly) params.set('unread', '1')
     if (bookmarkedOnly) params.set('bookmarked', '1')
     if (likedOnly) params.set('liked', '1')
+    if (commentedOnly) params.set('commented', '1')
     if (readOnly) params.set('read', '1')
     if (noFloor) params.set('no_floor', '1')
     params.set('limit', String(PAGE_SIZE))
@@ -195,6 +201,30 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
       () => apiPatch(`/api/articles/${article.id}/seen`, { seen: next }),
     )
   }, [patchArticleState])
+
+  const saveComment = useCallback(async (article: ArticleListItem, rawComment: string) => {
+    const nextComment = rawComment.trim()
+    const nextCommentValue = nextComment.length > 0 ? nextComment : null
+    const optimisticUpdatedAt = nextCommentValue ? new Date().toISOString() : null
+    mutateArticles(current => current.id === article.id
+      ? { ...current, comment: nextCommentValue, comment_updated_at: optimisticUpdatedAt }
+      : current)
+    setCommentSaving(true)
+    try {
+      const result = await apiPatch(`/api/articles/${article.id}/comment`, { comment: rawComment }) as { comment: string | null; comment_updated_at: string | null }
+      mutateArticles(current => current.id === article.id
+        ? { ...current, comment: result.comment, comment_updated_at: result.comment_updated_at }
+        : current)
+      void globalMutate((key: unknown) => typeof key === 'string' && (
+        key.startsWith('/api/feeds') || key.includes('/api/articles')
+      ))
+      setCommentDialogArticle(null)
+    } catch {
+      void mutate()
+    } finally {
+      setCommentSaving(false)
+    }
+  }, [globalMutate, mutate, mutateArticles])
 
   const toggleArticleSelection = useCallback((articleId: number) => {
     setSelectedArticleIds(prev => {
@@ -607,6 +637,17 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
                   {selectedArticleIds.has(article.id) ? <CheckSquare2 className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
                 </ActionChip>
                 <ActionChip
+                  active={!!effectiveArticle.comment}
+                  onClick={() => setCommentDialogArticle(effectiveArticle)}
+                  aria-pressed={!!effectiveArticle.comment}
+                  aria-label={t('article.comment')}
+                  tooltip={effectiveArticle.comment
+                    ? <div className="max-w-sm whitespace-pre-wrap text-left text-xs leading-relaxed">{effectiveArticle.comment}</div>
+                    : t('article.saveComment')}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" fill={effectiveArticle.comment ? 'currentColor' : 'none'} />
+                </ActionChip>
+                <ActionChip
                   active={!!effectiveArticle.bookmarked_at}
                   onClick={() => toggleBookmark(effectiveArticle)}
                   aria-pressed={!!effectiveArticle.bookmarked_at}
@@ -686,6 +727,18 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
           danger
           onConfirm={() => { void handleBulkDelete() }}
           onCancel={() => setBulkDeleteConfirmOpen(false)}
+        />
+      )}
+      {commentDialogArticle && (
+        <ArticleCommentDialog
+          open
+          title={commentDialogArticle.title}
+          initialComment={commentDialogArticle.comment}
+          saving={commentSaving}
+          onOpenChange={(open) => {
+            if (!open && !commentSaving) setCommentDialogArticle(null)
+          }}
+          onSave={(comment) => saveComment(commentDialogArticle, comment)}
         />
       )}
     </main>

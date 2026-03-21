@@ -48,6 +48,8 @@ export interface Article {
   full_text_translated: string | null
   translated_lang: string | null
   summary: string | null
+  comment: string | null
+  comment_updated_at: string | null
   og_image: string | null
   last_error: string | null
   retry_count: number
@@ -70,6 +72,8 @@ export interface ArticleListItem {
   lang: string | null
   summary: string | null
   excerpt: string | null
+  comment: string | null
+  comment_updated_at: string | null
   og_image: string | null
   seen_at: string | null
   read_at: string | null

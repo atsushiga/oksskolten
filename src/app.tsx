@@ -127,12 +127,15 @@ function ArticleListPage() {
   const isBookmarks = location.pathname === '/bookmarks'
   const isLikes = location.pathname === '/likes'
   const isHistory = location.pathname === '/history'
+  const isComments = location.pathname === '/comments'
   const isClips = location.pathname === '/clips'
   const { data: feedsData } = useSWR<{ feeds: Array<{ id: number; name: string; type: string; category_id: number | null; category_name: string | null }>; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData } = useSWR<{ categories: Array<{ id: number; name: string }> }>('/api/categories', fetcher)
 
   const headerName = isHistory
     ? t('feeds.history')
+    : isComments
+      ? t('feeds.comments')
     : isLikes
       ? t('feeds.likes')
       : isBookmarks
@@ -159,6 +162,7 @@ function ArticleListPage() {
       {isBookmarks && <HintBanner storageKey="hint-dismissed-bookmarks">{t('hint.bookmarks')}</HintBanner>}
       {isLikes && <HintBanner storageKey="hint-dismissed-likes">{t('hint.likes')}</HintBanner>}
       {isHistory && <HintBanner storageKey="hint-dismissed-history">{t('hint.history')}</HintBanner>}
+      {isComments && <HintBanner storageKey="hint-dismissed-comments">{t('hint.comments')}</HintBanner>}
       {isClips && <HintBanner storageKey="hint-dismissed-clips">{t('hint.clips')}</HintBanner>}
       <ArticleList ref={articleListRef} />
     </PageLayout>
@@ -233,7 +237,7 @@ function ArticleDetailPage() {
 
 // Determine the "page type" for animation decisions
 function getPageType(pathname: string): 'detail' | 'list' {
-  if (pathname === '/' || pathname === '/inbox' || pathname === '/bookmarks' || pathname === '/likes' || pathname === '/history' || pathname === '/clips' || pathname.startsWith('/feeds/') || pathname.startsWith('/categories/') || pathname.startsWith('/settings') || pathname.startsWith('/chat')) {
+  if (pathname === '/' || pathname === '/inbox' || pathname === '/bookmarks' || pathname === '/likes' || pathname === '/history' || pathname === '/comments' || pathname === '/clips' || pathname.startsWith('/feeds/') || pathname.startsWith('/categories/') || pathname.startsWith('/settings') || pathname.startsWith('/chat')) {
     return 'list'
   }
   return 'detail'
@@ -309,6 +313,7 @@ function AnimatedRoutes() {
             <Route path="/bookmarks" element={<ArticleListPage />} />
             <Route path="/likes" element={<ArticleListPage />} />
             <Route path="/history" element={<ArticleListPage />} />
+            <Route path="/comments" element={<ArticleListPage />} />
             <Route path="/clips" element={<ArticleListPage />} />
             <Route path="/feeds/:feedId" element={<ArticleListPage />} />
             <Route path="/categories/:categoryId" element={<ArticleListPage />} />

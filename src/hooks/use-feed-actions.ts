@@ -16,7 +16,7 @@ type ConfirmState =
 
 interface UseFeedActionsOpts {
   categorized: Map<number, FeedWithCounts[]>
-  mutateFeeds: KeyedMutator<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null }>
+  mutateFeeds: KeyedMutator<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; comment_count?: number; clip_feed_id: number | null }>
   mutateCategories: KeyedMutator<{ categories: Category[] }>
   startFeedFetch: (feedId: number) => Promise<FetchResult>
   onFetchComplete?: (result: FetchResult) => void

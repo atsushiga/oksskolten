@@ -44,7 +44,11 @@ function resolveSeedDates() {
 
 // structuredClone ensures reload resets to seed state
 let feeds: SeedFeed[] = structuredClone(seedFeeds) as SeedFeed[]
-let articles: SeedArticle[] = structuredClone(seedArticles) as SeedArticle[]
+let articles: SeedArticle[] = structuredClone(seedArticles).map(article => ({
+  comment: null,
+  comment_updated_at: null,
+  ...article,
+})) as SeedArticle[]
 resolveSeedDates()
 let currentConvLocale: Locale = getLocale()
 let conversations: SeedConversation[] = structuredClone(conversationsByLocale[currentConvLocale]) as SeedConversation[]
@@ -93,6 +97,8 @@ interface SeedArticle {
   summary: string | null
   summary_ja: string | null
   excerpt: string | null
+  comment: string | null
+  comment_updated_at: string | null
   lang: string | null
   og_image: string | null
   published_at: string | null
@@ -164,6 +170,8 @@ function createArticle(overrides: Partial<SeedArticle> & Pick<SeedArticle, 'feed
     summary: null,
     summary_ja: null,
     excerpt: null,
+    comment: null,
+    comment_updated_at: null,
     lang: null,
     og_image: null,
     published_at: now,
@@ -188,6 +196,8 @@ function toArticleListItem(a: SeedArticle): ArticleListItem {
     lang: a.lang,
     summary: summarizedIds.has(a.id) ? articleSummary(a) : null,
     excerpt: a.excerpt,
+    comment: a.comment,
+    comment_updated_at: a.comment_updated_at,
     og_image: a.og_image,
     seen_at: a.seen_at,
     read_at: a.read_at,

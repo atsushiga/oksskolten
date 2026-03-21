@@ -34,6 +34,7 @@ function scoreExpr(prefix: string, opts?: { searchBoost?: boolean }): string {
   const engagement = `(
     (CASE WHEN ${p}liked_at IS NOT NULL THEN 10 ELSE 0 END)
     + (CASE WHEN ${p}bookmarked_at IS NOT NULL THEN 5 ELSE 0 END)
+    + (CASE WHEN ${p}comment IS NOT NULL THEN 10 ELSE 0 END)
     + (CASE WHEN ${p}full_text_translated IS NOT NULL THEN 3 ELSE 0 END)
     + (CASE WHEN ${p}read_at IS NOT NULL THEN 2 ELSE 0 END)
   )`
@@ -48,6 +49,7 @@ function scoreExpr(prefix: string, opts?: { searchBoost?: boolean }): string {
 export const SCORED_ARTICLES_WHERE = `(
   liked_at IS NOT NULL
   OR bookmarked_at IS NOT NULL
+  OR comment IS NOT NULL
   OR read_at IS NOT NULL
   OR full_text_translated IS NOT NULL
   OR score > 0
@@ -84,6 +86,7 @@ export function getArticles(opts: {
   unread?: boolean
   bookmarked?: boolean
   liked?: boolean
+  commented?: boolean
   read?: boolean
   sort?: 'score'
   limit: number
@@ -109,6 +112,9 @@ export function getArticles(opts: {
   }
   if (opts.liked) {
     conditions.push('a.liked_at IS NOT NULL')
+  }
+  if (opts.commented) {
+    conditions.push('a.comment IS NOT NULL')
   }
   if (opts.read) {
     conditions.push('a.read_at IS NOT NULL')
@@ -170,7 +176,7 @@ export function getArticles(opts: {
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
   const orderBy = opts.sort === 'score'
     ? 'a.score DESC, a.published_at DESC'
-    : opts.liked ? 'a.liked_at DESC' : opts.read ? 'a.read_at DESC' : 'a.published_at DESC'
+    : opts.liked ? 'a.liked_at DESC' : opts.commented ? 'a.comment_updated_at DESC' : opts.read ? 'a.read_at DESC' : 'a.published_at DESC'
 
   const totalRow = getNamed<{ cnt: number }>(`
     SELECT COUNT(*) AS cnt FROM articles a ${where}
@@ -183,7 +189,7 @@ export function getArticles(opts: {
 
   const articles = allNamed<ArticleListItem>(`
     SELECT a.id, a.feed_id, f.name AS feed_name,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.comment, a.comment_updated_at, a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.score,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM articles a
@@ -199,7 +205,7 @@ export function getArticles(opts: {
 export function getArticleByUrl(url: string): ArticleDetail | undefined {
   return getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
+           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.comment, a.comment_updated_at, a.og_image,
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
@@ -212,7 +218,7 @@ export function getArticleByUrl(url: string): ArticleDetail | undefined {
 export function getArticleById(id: number): ArticleDetail | undefined {
   return getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
+           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.comment, a.comment_updated_at, a.og_image,
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
@@ -326,6 +332,11 @@ export function getBookmarkCount(): number {
   return row.cnt
 }
 
+export function getCommentCount(): number {
+  const row = getDb().prepare('SELECT COUNT(*) AS cnt FROM articles WHERE comment IS NOT NULL').get() as { cnt: number }
+  return row.cnt
+}
+
 export function recordArticleRead(
   id: number,
 ): { seen_at: string | null; read_at: string | null } | undefined {
@@ -339,6 +350,24 @@ export function recordArticleRead(
   syncScoreToSearch(id)
   syncArticleFiltersToSearch([{ id, is_unread: false }])
   return row ? { seen_at: row.seen_at, read_at: row.read_at } : undefined
+}
+
+export function updateArticleComment(
+  id: number,
+  comment: string | null,
+): { comment: string | null; comment_updated_at: string | null } | undefined {
+  const row = getDb().transaction(() => {
+    getDb().prepare(`
+      UPDATE articles
+      SET comment = ?,
+          comment_updated_at = CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END
+      WHERE id = ?
+    `).run(comment, comment, id)
+    updateScoreDb(id)
+    return getDb().prepare('SELECT comment, comment_updated_at FROM articles WHERE id = ?').get(id) as { comment: string | null; comment_updated_at: string | null } | undefined
+  })()
+  syncScoreToSearch(id)
+  return row
 }
 
 export function insertArticle(data: {

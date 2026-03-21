@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS articles (
   translated_lang      TEXT,
   summary              TEXT,
   excerpt              TEXT,
+  comment              TEXT,
+  comment_updated_at   TEXT,
   og_image             TEXT,
   score                REAL NOT NULL DEFAULT 0,
   last_error           TEXT,
@@ -67,6 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_liked_at ON articles(liked_at);
 CREATE INDEX IF NOT EXISTS idx_articles_category_published ON articles(category_id, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_feed_score ON articles(feed_id, score DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_category_score ON articles(category_id, score DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_comment_updated_at ON articles(comment_updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,

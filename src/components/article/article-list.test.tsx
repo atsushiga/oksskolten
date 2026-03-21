@@ -138,6 +138,8 @@ function makeArticle(overrides: Partial<ArticleListItem> = {}): ArticleListItem 
     lang: 'en',
     summary: null,
     excerpt: 'Excerpt text',
+    comment: null,
+    comment_updated_at: null,
     og_image: null,
     seen_at: null,
     read_at: null,

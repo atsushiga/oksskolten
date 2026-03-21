@@ -4,7 +4,7 @@ import useSWR from 'swr'
 import { fetcher } from '../../lib/fetcher'
 import { useI18n } from '../../lib/i18n'
 import { MD_BREAKPOINT } from '../../lib/breakpoints'
-import { Inbox, Plus, ChevronRight, Bookmark, ThumbsUp, Clock, Paperclip, Search, Command, ArrowBigUp, AlertTriangle, MessagesSquare } from 'lucide-react'
+import { Inbox, Plus, ChevronRight, Bookmark, ThumbsUp, Clock, Paperclip, Search, Command, ArrowBigUp, AlertTriangle, MessagesSquare, MessageSquare } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { useFetchProgressContext } from '../../contexts/fetch-progress-context'
@@ -69,12 +69,13 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
   const isBookmarks = location.pathname === '/bookmarks'
   const isLikes = location.pathname === '/likes'
   const isHistory = location.pathname === '/history'
+  const isComments = location.pathname === '/comments'
   const isClips = location.pathname === '/clips'
   const isChat = location.pathname.startsWith('/chat')
   const selectedFeedId = feedId ? Number(feedId) : null
   const selectedCategoryId = categoryId ? Number(categoryId) : null
   const { progress, startFeedFetch, subscribeFeedFetch } = useFetchProgressContext()
-  const { data: feedsData, mutate: mutateFeeds } = useSWR<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null }>('/api/feeds', fetcher)
+  const { data: feedsData, mutate: mutateFeeds } = useSWR<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; comment_count?: number; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData, mutate: mutateCategories } = useSWR<{ categories: Category[] }>('/api/categories', fetcher)
   const feeds = useMemo(() => feedsData?.feeds ?? [], [feedsData])
   const categories = useMemo(() => categoriesData?.categories ?? [], [categoriesData])
@@ -486,6 +487,8 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
           )}
 
           <SidebarNavItem icon={Clock} label={t('feeds.history')} selected={isHistory} onClick={() => { void navigate('/history'); onClose() }} />
+
+          <SidebarNavItem icon={MessageSquare} label={t('feeds.comments')} selected={isComments} onClick={() => { void navigate('/comments'); onClose() }} badge={(feedsData?.comment_count ?? 0) > 0 ? <UnreadBadge count={feedsData?.comment_count ?? 0} /> : undefined} />
 
           <SidebarNavItem icon={MessagesSquare} label={t('chat.title')} selected={isChat} onClick={() => { void navigate('/chat'); onClose() }} />
 

@@ -15,7 +15,7 @@ type AnchorChipProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
 
 type ActionChipProps = (ButtonChipProps | AnchorChipProps) & {
   active?: boolean
-  tooltip?: string
+  tooltip?: React.ReactNode
 }
 
 const BASE =

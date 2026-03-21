@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import useSWR from 'swr'
 import { renderMarkdown } from '../../lib/markdown'
 import { sanitizeHtml } from '../../lib/sanitize'
-import { fetcher, apiPost } from '../../lib/fetcher'
+import { fetcher, apiPatch, apiPost } from '../../lib/fetcher'
 import { queueSeenIds } from '../../lib/offlineQueue'
 import { useSWRConfig } from 'swr'
 import { trackRead } from '../../lib/readTracker'
@@ -21,6 +21,7 @@ import { formatDetailDate } from '../../lib/dateFormat'
 import { useAppLayout } from '../../app'
 import { Skeleton } from '../ui/skeleton'
 import { Callout } from '../ui/callout'
+import { Button } from '../ui/button'
 import { ArticleToolbar } from './article-toolbar'
 import { ArticleSummarySection } from './article-summary-section'
 import { ArticleTranslationBanner } from './article-translation-banner'
@@ -42,6 +43,9 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
 
   const isUserLang = article?.lang === (translateTargetLang || locale)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [commentSaving, setCommentSaving] = useState(false)
+  const [commentEditorOpen, setCommentEditorOpen] = useState(false)
 
   const articleRef = useRef<HTMLElement>(null)
 
@@ -72,6 +76,11 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
       void mutate({ ...article, summary }, false)
     }
   }, [summary]) // eslint-disable-line react-hooks/exhaustive-deps -- only sync when summary changes; article/mutate are refs to current data
+
+  useEffect(() => {
+    setCommentDraft(article?.comment ?? '')
+    setCommentEditorOpen(!!article?.comment)
+  }, [article?.comment])
 
   // Record article read on mount
   const viewedRef = useRef<number | null>(null)
@@ -178,6 +187,20 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
 
   const hasTranslation = !!fullTextTranslated
 
+  const saveComment = async () => {
+    if (!article) return
+    setCommentSaving(true)
+    try {
+      const result = await apiPatch(`/api/articles/${article.id}/comment`, { comment: commentDraft }) as { comment: string | null; comment_updated_at: string | null }
+      await mutate({ ...article, comment: result.comment, comment_updated_at: result.comment_updated_at }, false)
+      void globalMutate((key: string) => typeof key === 'string' && (
+        key.startsWith('/api/feeds') || key.includes('/api/articles')
+      ))
+    } finally {
+      setCommentSaving(false)
+    }
+  }
+
   return (
     <>
     <article ref={articleRef} className="article-card max-w-2xl mx-auto px-6 md:px-10 py-8">
@@ -205,13 +228,40 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
         isBookmarked={!!isBookmarked}
         isLiked={isLiked}
         isSeen={isSeen}
+        showCommentEditor={commentEditorOpen}
         archivingImages={archivingImages}
         onToggleBookmark={toggleBookmark}
         onToggleLike={toggleLike}
+        onToggleCommentEditor={() => setCommentEditorOpen(open => !open)}
         onToggleSeen={toggleSeen}
         onArchiveImages={handleArchiveImages}
         onDelete={() => setDeleteConfirmOpen(true)}
       />
+
+      {commentEditorOpen && (
+        <section className="mb-6 rounded-xl border border-border bg-bg-card p-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-medium text-text">{t('article.comment')}</h2>
+            {article.comment_updated_at && (
+              <span className="text-xs text-muted">{formatDetailDate(article.comment_updated_at, locale)}</span>
+            )}
+          </div>
+          <textarea
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            placeholder={t('article.commentPlaceholder')}
+            className="min-h-28 w-full resize-y rounded-lg border border-border bg-bg-input px-3 py-2 text-sm text-text placeholder:text-muted/50 outline-none focus:border-accent"
+          />
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setCommentDraft('')} disabled={commentSaving || commentDraft.length === 0}>
+              {t('article.clearComment')}
+            </Button>
+            <Button onClick={() => void saveComment()} disabled={commentSaving}>
+              {commentSaving ? t('article.savingComment') : t('article.saveComment')}
+            </Button>
+          </div>
+        </section>
+      )}
 
       {/* Inline Chat Panel */}
       {chatPosition === 'inline' && chat.open && (

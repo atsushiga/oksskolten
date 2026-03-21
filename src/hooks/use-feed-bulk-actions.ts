@@ -4,7 +4,7 @@ import type { FeedWithCounts } from '../../shared/types'
 import type { KeyedMutator } from 'swr'
 import type { FetchResult } from './use-fetch-progress'
 
-type FeedsData = { feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null }
+type FeedsData = { feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; comment_count?: number; clip_feed_id: number | null }
 
 interface UseFeedBulkActionsOpts {
   feeds: FeedWithCounts[]

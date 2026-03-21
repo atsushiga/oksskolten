@@ -16,6 +16,7 @@ import {
   markAllSeenByFeed,
   getBookmarkCount,
   getLikeCount,
+  getCommentCount,
   getClipFeed,
   getFeedMetrics,
   getCategories,
@@ -55,9 +56,10 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     const feeds = getFeeds()
     const bookmark_count = getBookmarkCount()
     const like_count = getLikeCount()
+    const comment_count = getCommentCount()
     const clipFeed = getClipFeed()
     const clip_feed_id = clipFeed?.id ?? null
-    reply.send({ feeds, bookmark_count, like_count, clip_feed_id })
+    reply.send({ feeds, bookmark_count, like_count, comment_count, clip_feed_id })
   })
 
   api.get('/api/discover-title', async (request, reply) => {

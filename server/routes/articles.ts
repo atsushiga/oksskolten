@@ -16,6 +16,7 @@ import {
   markArticleBookmarked,
   markArticleLiked,
   updateArticleContent,
+  updateArticleComment,
   updateScore,
   getExistingArticleUrls,
   getClipFeed,
@@ -61,6 +62,7 @@ const ArticlesQuery = z.object({
   unread: z.string().optional(),
   bookmarked: z.string().optional(),
   liked: z.string().optional(),
+  commented: z.string().optional(),
   read: z.string().optional(),
   sort: z.string().optional(),
   no_floor: z.string().optional(),
@@ -105,6 +107,7 @@ const FromUrlBody = z.object({
 const SeenBody = z.object({ seen: z.boolean({ message: 'seen must be a boolean' }) })
 const BookmarkBody = z.object({ bookmarked: z.boolean({ message: 'bookmarked must be a boolean' }) })
 const LikeBody = z.object({ liked: z.boolean({ message: 'liked must be a boolean' }) })
+const CommentBody = z.object({ comment: z.string().max(5000, 'comment must be 5000 characters or fewer') })
 const BatchSeenBody = z.object({
   ids: z.array(z.number()).min(1, 'ids must be a non-empty array').max(MAX_BATCH_SEEN, `Maximum ${MAX_BATCH_SEEN} ids per request`),
   seen: z.boolean().optional(),
@@ -224,15 +227,16 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
     const feedId = query.feed_id ?? undefined
     const categoryId = query.category_id ?? undefined
     const unread = query.unread === '1'
-    const bookmarked = query.bookmarked === '1'
-    const liked = query.liked === '1'
-    const read = query.read === '1'
+  const bookmarked = query.bookmarked === '1'
+  const liked = query.liked === '1'
+  const commented = query.commented === '1'
+  const read = query.read === '1'
     const sort = query.sort === 'score' ? 'score' as const : undefined
     const noFloor = query.no_floor === '1'
 
     const isClipFeed = feedId != null && getClipFeed()?.id === feedId
-    const smartFloor = !noFloor && !isClipFeed && !unread && !bookmarked && !liked && !read
-    const { articles, total, totalWithoutFloor } = getArticles({ feedId, categoryId, unread, bookmarked, liked, read, sort, limit, offset, smartFloor })
+    const smartFloor = !noFloor && !isClipFeed && !unread && !bookmarked && !liked && !commented && !read
+    const { articles, total, totalWithoutFloor } = getArticles({ feedId, categoryId, unread, bookmarked, liked, commented, read, sort, limit, offset, smartFloor })
     const hasMore = offset + articles.length < total
 
     // When unread filter yields 0 results, return total article count (without unread filter)
@@ -424,6 +428,24 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
       const body = parseOrBadRequest(LikeBody, request.body, reply)
       if (!body) return
       const result = markArticleLiked(params.id, body.liked)
+      if (!result) {
+        reply.status(404).send({ error: 'Article not found' })
+        return
+      }
+      reply.send(result)
+    },
+  )
+
+  api.patch(
+    '/api/articles/:id/comment',
+    { preHandler: [requireJson] },
+    async (request, reply) => {
+      const params = parseOrBadRequest(NumericIdParams, request.params, reply)
+      if (!params) return
+      const body = parseOrBadRequest(CommentBody, request.body, reply)
+      if (!body) return
+      const normalized = body.comment.trim()
+      const result = updateArticleComment(params.id, normalized.length > 0 ? normalized : null)
       if (!result) {
         reply.status(404).send({ error: 'Article not found' })
         return

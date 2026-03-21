@@ -5,7 +5,7 @@ import type { KeyedMutator } from 'swr'
 
 interface UseFeedDragDropOpts {
   feeds: FeedWithCounts[]
-  mutateFeeds: KeyedMutator<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null }>
+  mutateFeeds: KeyedMutator<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; comment_count?: number; clip_feed_id: number | null }>
   onDropComplete?: () => void
 }
 

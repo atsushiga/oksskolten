@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ActionChip } from '../ui/action-chip'
 import { ChatInlineTrigger } from '../chat/chat-inline'
-import { Bookmark, ThumbsUp, CloudUpload, CloudCheck, Trash2, Languages, Sparkles, RotateCcw, Check } from 'lucide-react'
+import { Bookmark, ThumbsUp, CloudUpload, CloudCheck, Trash2, Languages, Sparkles, RotateCcw, Check, MessageSquare } from 'lucide-react'
 import { useI18n } from '../../lib/i18n'
 import type { ArticleDetail } from '../../../shared/types'
 
@@ -20,9 +20,11 @@ interface ArticleToolbarProps {
   isBookmarked: boolean
   isLiked: boolean
   isSeen: boolean
+  showCommentEditor: boolean
   archivingImages: boolean
   onToggleBookmark: () => void
   onToggleLike: () => void
+  onToggleCommentEditor: () => void
   onToggleSeen: () => void
   onArchiveImages: () => void
   onDelete: () => void
@@ -43,9 +45,11 @@ export function ArticleToolbar({
   isBookmarked,
   isLiked,
   isSeen,
+  showCommentEditor,
   archivingImages,
   onToggleBookmark,
   onToggleLike,
+  onToggleCommentEditor,
   onToggleSeen,
   onArchiveImages,
   onDelete,
@@ -94,6 +98,12 @@ export function ArticleToolbar({
         <ThumbsUp
           className="w-3.5 h-3.5"
           fill={isLiked ? 'currentColor' : 'none'}
+        />
+      </ActionChip>
+      <ActionChip active={showCommentEditor || !!article.comment} onClick={onToggleCommentEditor} aria-pressed={showCommentEditor} aria-label={t('article.comment')} tooltip={article.comment ?? t('article.comment')}>
+        <MessageSquare
+          className="w-3.5 h-3.5"
+          fill={showCommentEditor || article.comment ? 'currentColor' : 'none'}
         />
       </ActionChip>
       <ActionChip onClick={onToggleSeen} tooltip={isSeen ? t('article.markUnread') : t('article.markRead')}>
