@@ -310,7 +310,8 @@ describe('translate_article', () => {
   it('returns cached translation if available', async () => {
     const feed = seedFeed()
     const id = seedArticle(feed.id, { full_text: 'text', lang: 'en' })
-    updateArticleContent(id, { full_text_translated: 'Existing translation', translated_lang: 'en' })
+    // Default user language is 'ja' — cache must match translated_lang
+    updateArticleContent(id, { full_text_translated: 'Existing translation', translated_lang: 'ja' })
 
     const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
     expect(result.full_text_translated).toBe('Existing translation')
@@ -320,8 +321,8 @@ describe('translate_article', () => {
   it('does not cache when translated_lang differs from user language', async () => {
     const feed = seedFeed()
     const id = seedArticle(feed.id, { full_text: 'French text', lang: 'fr' })
-    // translated_lang='ja' but user language defaults to 'en' → stale
-    updateArticleContent(id, { full_text_translated: 'Old Japanese translation', translated_lang: 'ja' })
+    // translated_lang='en' but user language defaults to 'ja' → stale
+    updateArticleContent(id, { full_text_translated: 'Old English translation', translated_lang: 'en' })
 
     const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
     // Should re-translate, not return cached
@@ -349,11 +350,11 @@ describe('translate_article', () => {
 
   it('returns error when article is already in user language', async () => {
     const feed = seedFeed()
-    // Default user language is 'en'
-    const id = seedArticle(feed.id, { full_text: 'English text', lang: 'en' })
+    // Default user language is 'ja'
+    const id = seedArticle(feed.id, { full_text: '日本語の本文', lang: 'ja' })
 
     const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
-    expect(result.error).toBe('Article is already in en')
+    expect(result.error).toBe('Article is already in ja')
   })
 })
 

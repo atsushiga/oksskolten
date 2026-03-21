@@ -151,7 +151,8 @@ describe('POST /api/articles/:id/summarize?stream=1', () => {
 describe('POST /api/articles/:id/translate', () => {
   it('returns cached translation', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: 'English text', full_text_translated: '日本語テキスト', translated_lang: 'en' })
+    // Default target language is 'ja' — translated_lang must match for cache hit
+    const artId = seedArticle(feed.id, { full_text: 'English text', full_text_translated: '日本語テキスト', translated_lang: 'ja' })
 
     const res = await app.inject({
       method: 'POST',
@@ -167,8 +168,8 @@ describe('POST /api/articles/:id/translate', () => {
 
   it('does not return cached translation when translated_lang differs from user language', async () => {
     const feed = seedFeed()
-    // translated_lang='ja' but user language defaults to 'en' → stale, should re-translate
-    const artId = seedArticle(feed.id, { full_text: 'French text', lang: 'fr', full_text_translated: '古い日本語訳', translated_lang: 'ja' })
+    // translated_lang='en' but user language defaults to 'ja' → stale, should re-translate
+    const artId = seedArticle(feed.id, { full_text: 'French text', lang: 'fr', full_text_translated: 'Old English translation', translated_lang: 'en' })
 
     mockStreamTranslate.mockReset()
 
@@ -202,8 +203,8 @@ describe('POST /api/articles/:id/translate', () => {
 
   it('returns 400 when article is already in user language', async () => {
     const feed = seedFeed()
-    // Default user language is 'en', so an English article should be rejected
-    const artId = seedArticle(feed.id, { full_text: 'English article', lang: 'en' })
+    // Default user language is 'ja', so a Japanese article should be rejected
+    const artId = seedArticle(feed.id, { full_text: '日本語の記事', lang: 'ja' })
 
     const res = await app.inject({
       method: 'POST',
@@ -213,7 +214,7 @@ describe('POST /api/articles/:id/translate', () => {
     })
 
     expect(res.statusCode).toBe(400)
-    expect(res.json().error).toMatch(/already in en/)
+    expect(res.json().error).toMatch(/already in ja/)
   })
 
   it('returns 400 when no full_text', async () => {

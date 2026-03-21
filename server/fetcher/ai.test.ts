@@ -200,7 +200,7 @@ describe('translateArticle', () => {
 
     const params = mockCreateMessage.mock.calls[0][0]
     expect(params.messages[0].content).toContain('Content to translate')
-    expect(params.messages[0].content).toContain('Translate the following article into English')
+    expect(params.messages[0].content).toContain('Translate the following article into Japanese')
   })
 
   it('sets maxTokens to 16384 for translate', async () => {
