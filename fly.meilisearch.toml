@@ -1,0 +1,28 @@
+app = "oksskolten-atsushi-meili"
+primary_region = "nrt"
+
+[build]
+  image = "getmeili/meilisearch:v1.13"
+
+[env]
+  MEILI_ENV = "production"
+  MEILI_DB_PATH = "/meili_data/data"
+  MEILI_NO_ANALYTICS = "true"
+  MEILI_LOG_LEVEL = "WARN"
+
+[http_service]
+  internal_port = 7700
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[vm]]
+  memory = "1gb"
+  cpus = 1
+  memory_mb = 1024
+
+[[mounts]]
+  source = "oksskolten_meili_data"
+  destination = "/meili_data"

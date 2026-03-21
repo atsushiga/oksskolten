@@ -9,12 +9,16 @@ const log = logger.child('db')
 
 // --- DB instance ---
 
-function isRemote(url: string): boolean {
+export function isRemoteDatabaseUrl(url: string): boolean {
   return url.startsWith('libsql://') || url.startsWith('https://')
 }
 
+export function getDatabaseUrl(): string {
+  return process.env.DATABASE_URL || `file:${dataPath('rss.db')}`
+}
+
 function openDb(dbUrl: string) {
-  const remote = isRemote(dbUrl)
+  const remote = isRemoteDatabaseUrl(dbUrl)
   if (!remote && dbUrl !== ':memory:') {
     // For local file paths, ensure the parent directory exists
     const filePath = dbUrl.startsWith('file:') ? dbUrl.slice(5) : dbUrl
@@ -35,7 +39,7 @@ function openDb(dbUrl: string) {
   return instance
 }
 
-let db = openDb(process.env.DATABASE_URL || `file:${dataPath('rss.db')}`)
+let db = openDb(getDatabaseUrl())
 
 export function getDb() {
   return db
@@ -128,7 +132,7 @@ export function runMigrations() {
       .map(row => row.name)
   )
 
-  const remote = isRemote(process.env.DATABASE_URL || '')
+  const remote = isRemoteDatabaseUrl(getDatabaseUrl())
   for (const file of files) {
     if (applied.has(file)) continue
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8')

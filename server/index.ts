@@ -11,7 +11,7 @@ import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureC
 import { logger } from './logger.js'
 
 const log = logger
-import { getDb } from './db/connection.js'
+import { getDb, getDatabaseUrl, isRemoteDatabaseUrl } from './db/connection.js'
 import { registerApi } from './api.js'
 import { registerChatApi } from './chatRoutes.js'
 import { authRoutes } from './authRoutes.js'
@@ -30,7 +30,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '..')
 
 // --- Migrations ---
-runMigrations()
+const databaseUrl = getDatabaseUrl()
+const startupMigrationOverride = process.env.RUN_MIGRATIONS_ON_STARTUP
+const skipRemoteProductionMigrations =
+  process.env.NODE_ENV === 'production' &&
+  isRemoteDatabaseUrl(databaseUrl) &&
+  startupMigrationOverride !== '1'
+
+if (startupMigrationOverride === '0' || skipRemoteProductionMigrations) {
+  log.warn('Skipping startup migrations')
+} else {
+  runMigrations()
+}
 
 // --- Ensure virtual feed for clipped articles exists ---
 ensureClipFeed()
