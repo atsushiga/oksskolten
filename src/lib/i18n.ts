@@ -68,6 +68,8 @@ const dict = {
   'articles.empty': { ja: '記事がありません', en: 'No articles' },
   'articles.allRead': { ja: 'すべて読みました', en: 'All caught up!' },
   'articles.showReadArticles': { ja: '既読記事を表示する', en: 'Show read articles' },
+  'articles.showUnreadOnly': { ja: '未読のみ', en: 'Unread only' },
+  'articles.showAllArticles': { ja: 'すべて表示', en: 'Show all' },
 
   // FeedErrorBanner - pipeline stages
   'feedError.stage.discovery': { ja: 'RSS検出', en: 'RSS Discovery' },
@@ -154,6 +156,7 @@ const dict = {
   'article.saveComment': { ja: 'コメントを保存', en: 'Save comment' },
   'article.savingComment': { ja: '保存中...', en: 'Saving...' },
   'article.clearComment': { ja: 'コメントを削除', en: 'Clear comment' },
+  'article.scrollToTop': { ja: '先頭に戻る', en: 'Scroll to top' },
   'articles.selectAll': { ja: 'すべて選択', en: 'Select all' },
   'articles.clearSelection': { ja: '選択解除', en: 'Clear selection' },
   'articles.selectedCount': { ja: '${count} 件選択中', en: '${count} selected' },

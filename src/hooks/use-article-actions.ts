@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSWRConfig } from 'swr'
 import { apiPatch, apiPost, apiDelete } from '../lib/fetcher'
+import { clearArticleOverride, setArticleOverride } from '../lib/article-overrides'
 import type { ArticleDetail } from '../../shared/types'
 
 export function useArticleActions(article: ArticleDetail | undefined, articleKey: string) {
@@ -37,9 +38,11 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
   const toggleBookmark = useCallback(async () => {
     if (!article) return
     const next = !isBookmarked
+    const nextBookmarkedAt = next ? new Date().toISOString() : null
     setOptimisticBookmark(next)
+    setArticleOverride(article.id, { bookmarked_at: nextBookmarkedAt })
     void globalMutate(articleKey, (current: ArticleDetail | undefined) => (
-      current ? { ...current, bookmarked_at: next ? new Date().toISOString() : null } : current
+      current ? { ...current, bookmarked_at: nextBookmarkedAt } : current
     ), false)
     try {
       await apiPatch(`/api/articles/${article.id}/bookmark`, { bookmarked: next })
@@ -47,6 +50,7 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
       revalidateLists()
     } catch {
       setOptimisticBookmark(undefined)
+      clearArticleOverride(article.id, ['bookmarked_at'])
       void globalMutate(articleKey)
     }
   }, [article, articleKey, isBookmarked, globalMutate, revalidateLists])
@@ -56,6 +60,7 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
     const next = !isLiked
     const nextLikedAt = next ? new Date().toISOString() : null
     setOptimisticLiked(nextLikedAt)
+    setArticleOverride(article.id, { liked_at: nextLikedAt })
     void globalMutate(articleKey, (current: ArticleDetail | undefined) => (
       current ? { ...current, liked_at: nextLikedAt } : current
     ), false)
@@ -65,6 +70,7 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
       revalidateLists()
     } catch {
       setOptimisticLiked(undefined)
+      clearArticleOverride(article.id, ['liked_at'])
       void globalMutate(articleKey)
     }
   }, [article, articleKey, isLiked, globalMutate, revalidateLists])
@@ -72,7 +78,9 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
   const toggleSeen = useCallback(async () => {
     if (!article) return
     const next = !isSeen
+    const nextSeenAt = next ? (article.seen_at ?? new Date().toISOString()) : null
     setOptimisticSeen(next)
+    setArticleOverride(article.id, { seen_at: nextSeenAt, read_at: next ? article.read_at : null })
     void globalMutate(articleKey, (current: ArticleDetail | undefined) => (
       current ? {
         ...current,

@@ -26,6 +26,9 @@ import { ArticleCommentDialog } from './article-comment-dialog'
 import { useKeyboardNavigationContext } from '../../contexts/keyboard-navigation-context'
 import { useKeyboardNavigation } from '../../hooks/use-keyboard-navigation'
 import { apiPatch, apiPost } from '../../lib/fetcher'
+import { patchArticleCacheValue } from '../../lib/article-cache'
+import { applyArticleOverride, clearArticleOverride, getArticleOverride } from '../../lib/article-overrides'
+import { getArticleListInvalidationVersion } from '../../lib/article-sync'
 import { Bookmark, Check, CheckCheck, CheckSquare2, MessageSquare, RotateCcw, Square, ThumbsUp, Trash2 } from 'lucide-react'
 import type { ArticleListItem, FeedWithCounts } from '../../../shared/types'
 import type { LayoutName } from '../../data/layouts'
@@ -67,8 +70,9 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const currentFeed = feedId && feedsData ? feedsData.feeds.find(f => f.id === feedId) : undefined
   const categoryId = categoryIdParam ? Number(categoryIdParam) : undefined
   const [showReadArticles, setShowReadArticles] = useState(false)
+  const [manualUnreadOnly, setManualUnreadOnly] = useState(false)
   const categoryUnreadOnly = !!categoryId && settings.categoryUnreadOnly === 'on'
-  const unreadOnly = isInbox || (categoryUnreadOnly && !showReadArticles)
+  const unreadOnly = isInbox || manualUnreadOnly || (categoryUnreadOnly && !showReadArticles)
   const bookmarkedOnly = isBookmarks
   const likedOnly = isLikes
   const commentedOnly = isComments
@@ -157,6 +161,14 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     )
   }, [mutate])
 
+  const syncArticleCaches = useCallback((articleId: number, patch: Parameters<typeof patchArticleCacheValue>[2]) => {
+    void globalMutate(
+      (key: unknown) => typeof key === 'string' && key.startsWith('/api/articles'),
+      (current: unknown) => patchArticleCacheValue(current, articleId, patch),
+      { revalidate: false },
+    )
+  }, [globalMutate])
+
   const patchArticleState = useCallback(async (
     articleId: number,
     next: Partial<ArticleListItem>,
@@ -165,6 +177,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     const previous = articles.find(article => article.id === articleId)
     if (!previous) return
     mutateArticles(article => article.id === articleId ? { ...article, ...next } : article)
+    syncArticleCaches(articleId, next)
     try {
       await request()
       void globalMutate((key: unknown) => typeof key === 'string' && (
@@ -173,7 +186,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     } catch {
       void mutate()
     }
-  }, [articles, globalMutate, mutate, mutateArticles])
+  }, [articles, globalMutate, mutate, mutateArticles, syncArticleCaches])
 
   const toggleBookmark = useCallback((article: ArticleListItem) => {
     const next = !article.bookmarked_at
@@ -206,15 +219,18 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     const nextComment = rawComment.trim()
     const nextCommentValue = nextComment.length > 0 ? nextComment : null
     const optimisticUpdatedAt = nextCommentValue ? new Date().toISOString() : null
+    const optimisticPatch = { comment: nextCommentValue, comment_updated_at: optimisticUpdatedAt }
     mutateArticles(current => current.id === article.id
-      ? { ...current, comment: nextCommentValue, comment_updated_at: optimisticUpdatedAt }
+      ? { ...current, ...optimisticPatch }
       : current)
+    syncArticleCaches(article.id, optimisticPatch)
     setCommentSaving(true)
     try {
       const result = await apiPatch(`/api/articles/${article.id}/comment`, { comment: rawComment }) as { comment: string | null; comment_updated_at: string | null }
       mutateArticles(current => current.id === article.id
         ? { ...current, comment: result.comment, comment_updated_at: result.comment_updated_at }
         : current)
+      syncArticleCaches(article.id, { comment: result.comment, comment_updated_at: result.comment_updated_at })
       void globalMutate((key: unknown) => typeof key === 'string' && (
         key.startsWith('/api/feeds') || key.includes('/api/articles')
       ))
@@ -224,7 +240,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     } finally {
       setCommentSaving(false)
     }
-  }, [globalMutate, mutate, mutateArticles])
+  }, [globalMutate, mutate, mutateArticles, syncArticleCaches])
 
   const toggleArticleSelection = useCallback((articleId: number) => {
     setSelectedArticleIds(prev => {
@@ -238,6 +254,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const handleSelectAll = useCallback(() => {
     setSelectedArticleIds(allSelected ? new Set() : new Set(articles.map(article => article.id)))
   }, [allSelected, articles])
+
 
   useKeyboardNavigation({
     items: articleIds,
@@ -277,6 +294,8 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   // Infinite scroll
   // ---------------------------------------------------------------------------
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const lastInvalidationVersionRef = useRef(getArticleListInvalidationVersion())
+  const [, forceOverrideRefresh] = useState(0)
 
   // Keep loadMore in a stable ref so the IntersectionObserver callback
   // always sees the latest values without needing to recreate the observer.
@@ -457,19 +476,67 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     setAutoReadIds(new Set())
     setNoFloor(false)
     setShowReadArticles(false)
+    setManualUnreadOnly(false)
     setSelectedArticleIds(new Set())
     setFocusedItemId(null)
   }, [feedId, categoryId, setFocusedItemId])
+
+  useEffect(() => {
+    const revalidateIfNeeded = () => {
+      const nextVersion = getArticleListInvalidationVersion()
+      if (nextVersion <= lastInvalidationVersionRef.current) return
+      lastInvalidationVersionRef.current = nextVersion
+      void mutate()
+    }
+
+    revalidateIfNeeded()
+    window.addEventListener('pageshow', revalidateIfNeeded)
+    window.addEventListener('focus', revalidateIfNeeded)
+    window.addEventListener('article-list-invalidated', revalidateIfNeeded as EventListener)
+    return () => {
+      window.removeEventListener('pageshow', revalidateIfNeeded)
+      window.removeEventListener('focus', revalidateIfNeeded)
+      window.removeEventListener('article-list-invalidated', revalidateIfNeeded as EventListener)
+    }
+  }, [mutate, location.key])
+
+  useEffect(() => {
+    const handleOverrideChange = () => forceOverrideRefresh(v => v + 1)
+    window.addEventListener('article-overrides-changed', handleOverrideChange)
+    return () => window.removeEventListener('article-overrides-changed', handleOverrideChange)
+  }, [])
+
+  useEffect(() => {
+    for (const article of articles) {
+      const override = getArticleOverride(article.id)
+      if (!override) continue
+      const resolvedKeys = Object.keys(override).filter((key) => {
+        const typedKey = key as keyof typeof override
+        return article[typedKey as keyof ArticleListItem] === override[typedKey]
+      }) as (keyof typeof override)[]
+      if (resolvedKeys.length > 0) {
+        clearArticleOverride(article.id, resolvedKeys)
+      }
+    }
+  }, [articles])
 
   const handleBulkSeen = useCallback(async (seen: boolean) => {
     const ids = [...selectedArticleIds]
     if (ids.length === 0) return
     const selected = new Set(ids)
+    const seenAt = seen ? new Date().toISOString() : null
     mutateArticles(article => (
       selected.has(article.id)
-        ? { ...article, seen_at: seen ? (article.seen_at ?? new Date().toISOString()) : null, read_at: seen ? article.read_at : null }
+        ? { ...article, seen_at: seen ? (article.seen_at ?? seenAt) : null, read_at: seen ? article.read_at : null }
         : article
     ))
+    ids.forEach(id => {
+      syncArticleCaches(id, current => ({
+        ...current,
+        seen_at: seen ? (current.seen_at ?? seenAt) : null,
+        read_at: seen ? current.read_at : null,
+      }))
+    })
     setSelectedArticleIds(new Set())
     try {
       await apiPost('/api/articles/batch-seen', { ids, seen })
@@ -479,13 +546,14 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     } catch {
       void mutate()
     }
-  }, [globalMutate, mutate, mutateArticles, selectedArticleIds])
+  }, [globalMutate, mutate, mutateArticles, selectedArticleIds, syncArticleCaches])
 
   const handleBulkDelete = useCallback(async () => {
     const ids = [...selectedArticleIds]
     if (ids.length === 0) return
     const selected = new Set(ids)
     mutateArticles(article => selected.has(article.id) ? null : article)
+    ids.forEach(id => syncArticleCaches(id, () => null))
     setBulkDeleteConfirmOpen(false)
     setSelectedArticleIds(new Set())
     try {
@@ -496,7 +564,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     } catch {
       void mutate()
     }
-  }, [globalMutate, mutate, mutateArticles, selectedArticleIds])
+  }, [globalMutate, mutate, mutateArticles, selectedArticleIds, syncArticleCaches])
 
   return (
     <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
@@ -505,6 +573,12 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
           {allSelected ? <CheckSquare2 className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
           {allSelected ? t('articles.clearSelection') : t('articles.selectAll')}
         </ActionChip>
+        {!isInbox && !isHistory && (
+          <ActionChip active={manualUnreadOnly} onClick={() => setManualUnreadOnly(value => !value)}>
+            <Check className="w-3.5 h-3.5" />
+            {manualUnreadOnly ? t('articles.showAllArticles') : t('articles.showUnreadOnly')}
+          </ActionChip>
+        )}
         {selectedCount > 0 && (
           <>
             <ActionChip active>{t('articles.selectedCount', { count: String(selectedCount) })}</ActionChip>
@@ -530,9 +604,11 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
           if (result.error) toast.error(t('toast.fetchError', { name }))
           else if (result.totalNew > 0) toast.success(t('toast.fetchedArticles', { count: String(result.totalNew), name }))
           else toast(t('toast.noNewArticles', { name }))
-        } else {
-          await mutate()
         }
+        await globalMutate((key: unknown) => typeof key === 'string' && (
+          key.startsWith('/api/feeds') || key.startsWith('/api/articles')
+        ))
+        await mutate()
       }} />}
 
       {currentFeed && currentFeed.type !== 'clip' && settings.showFeedActivity === 'on' && (
@@ -593,10 +669,11 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
 
       <div className={isGridLayout ? 'grid grid-cols-1 md:grid-cols-2 gap-4 px-4 md:px-6' : ''}>
         {articles.map((article, index) => {
-          const isAutoRead = autoReadIds.has(article.id)
+          const overriddenArticle = applyArticleOverride(article)
+          const isAutoRead = autoReadIds.has(overriddenArticle.id)
           const effectiveArticle = isAutoRead
-            ? { ...article, seen_at: article.seen_at ?? new Date().toISOString() }
-            : article
+            ? { ...overriddenArticle, seen_at: overriddenArticle.seen_at ?? new Date().toISOString() }
+            : overriddenArticle
           const handleOverlayOpen = articleOpenMode === 'overlay' ? (e: React.MouseEvent<HTMLAnchorElement>) => {
             if (e.metaKey || e.ctrlKey || e.button === 1) return
             e.preventDefault()
@@ -632,7 +709,6 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
                   active={selectedArticleIds.has(article.id)}
                   onClick={() => toggleArticleSelection(article.id)}
                   aria-label={selectedArticleIds.has(article.id) ? t('articles.clearSelection') : t('articles.selectAll')}
-                  className={selectedArticleIds.has(article.id) ? '' : 'opacity-0 pointer-events-none transition-opacity group-hover/article:opacity-100 group-hover/article:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'}
                 >
                   {selectedArticleIds.has(article.id) ? <CheckSquare2 className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
                 </ActionChip>

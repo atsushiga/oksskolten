@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import useSWR from 'swr'
 import { renderMarkdown } from '../../lib/markdown'
@@ -18,15 +18,19 @@ import { useMetrics } from '../../hooks/use-metrics'
 import { useSummarize } from '../../hooks/use-summarize'
 import { useTranslate } from '../../hooks/use-translate'
 import { formatDetailDate } from '../../lib/dateFormat'
+import { patchArticleCacheValue } from '../../lib/article-cache'
+import { bumpArticleListInvalidationVersion } from '../../lib/article-sync'
 import { useAppLayout } from '../../app'
 import { Skeleton } from '../ui/skeleton'
 import { Callout } from '../ui/callout'
 import { Button } from '../ui/button'
+import { useIsTouchDevice } from '../../hooks/use-is-touch-device'
 import { ArticleToolbar } from './article-toolbar'
 import { ArticleSummarySection } from './article-summary-section'
 import { ArticleTranslationBanner } from './article-translation-banner'
 import { ArticleContentBody } from './article-content-body'
 import { ArticleSimilarBanner } from './article-similar-banner'
+import { ChevronUp } from 'lucide-react'
 import type { ArticleDetail as ArticleDetailData } from '../../../shared/types'
 
 interface ArticleDetailProps {
@@ -40,12 +44,14 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   const articleKey = `/api/articles/by-url?url=${encodeURIComponent(articleUrl)}`
   const { data: article, error, mutate } = useSWR<ArticleDetailData>(articleKey, fetcher)
   const { mutate: globalMutate } = useSWRConfig()
+  const isTouchDevice = useIsTouchDevice()
 
   const isUserLang = article?.lang === (translateTargetLang || locale)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
   const [commentDraft, setCommentDraft] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [commentEditorOpen, setCommentEditorOpen] = useState(false)
+  const [showScrollToTop, setShowScrollToTop] = useState(false)
 
   const articleRef = useRef<HTMLElement>(null)
 
@@ -63,6 +69,15 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     toggleBookmark, toggleLike, toggleSeen, handleArchiveImages, handleDelete,
   } = useArticleActions(article, articleKey)
   const chat = useChatInline(article?.id ?? 0)
+  const previousArticleStateRef = useRef<Pick<ArticleDetailData, 'id' | 'bookmarked_at' | 'liked_at' | 'comment' | 'comment_updated_at' | 'seen_at' | 'read_at'> | null>(null)
+
+  const syncArticleCaches = useCallback((articleId: number, patch: Parameters<typeof patchArticleCacheValue>[2]) => {
+    void globalMutate(
+      (key: unknown) => typeof key === 'string' && key.startsWith('/api/articles'),
+      (current: unknown) => patchArticleCacheValue(current, articleId, patch),
+      { revalidate: false },
+    )
+  }, [globalMutate])
 
   // Sync translation/summary back into SWR cache so it persists across navigations
   useEffect(() => {
@@ -81,6 +96,37 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     setCommentDraft(article?.comment ?? '')
     setCommentEditorOpen(!!article?.comment)
   }, [article?.comment])
+
+  useEffect(() => {
+    if (!article) return
+    const previous = previousArticleStateRef.current
+    if (previous && previous.id === article.id && (
+      previous.bookmarked_at !== article.bookmarked_at
+      || previous.liked_at !== article.liked_at
+      || previous.comment !== article.comment
+      || previous.comment_updated_at !== article.comment_updated_at
+      || previous.seen_at !== article.seen_at
+      || previous.read_at !== article.read_at
+    )) {
+      syncArticleCaches(article.id, {
+        bookmarked_at: article.bookmarked_at,
+        liked_at: article.liked_at,
+        comment: article.comment,
+        comment_updated_at: article.comment_updated_at,
+        seen_at: article.seen_at,
+        read_at: article.read_at,
+      })
+    }
+    previousArticleStateRef.current = {
+      id: article.id,
+      bookmarked_at: article.bookmarked_at,
+      liked_at: article.liked_at,
+      comment: article.comment,
+      comment_updated_at: article.comment_updated_at,
+      seen_at: article.seen_at,
+      read_at: article.read_at,
+    }
+  }, [article, syncArticleCaches])
 
   // Record article read on mount
   const viewedRef = useRef<number | null>(null)
@@ -161,6 +207,14 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     }
   }, [hasArticle, navigate])
 
+  useEffect(() => {
+    if (!isTouchDevice) return
+    const handleScroll = () => setShowScrollToTop(window.scrollY > 320)
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [isTouchDevice])
+
   if (error) {
     return (
       <div className="max-w-2xl mx-auto px-6 md:px-10 py-12 text-center">
@@ -186,6 +240,31 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   }
 
   const hasTranslation = !!fullTextTranslated
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+  const handleToggleBookmark = () => {
+    if (article) {
+      syncArticleCaches(article.id, { bookmarked_at: isBookmarked ? null : new Date().toISOString() })
+      bumpArticleListInvalidationVersion()
+    }
+    toggleBookmark()
+  }
+  const handleToggleLike = () => {
+    if (article) {
+      syncArticleCaches(article.id, { liked_at: isLiked ? null : new Date().toISOString() })
+      bumpArticleListInvalidationVersion()
+    }
+    toggleLike()
+  }
+  const handleToggleSeen = () => {
+    if (article) {
+      syncArticleCaches(article.id, {
+        seen_at: isSeen ? null : (article.seen_at ?? new Date().toISOString()),
+        read_at: isSeen ? null : article.read_at,
+      })
+      bumpArticleListInvalidationVersion()
+    }
+    toggleSeen()
+  }
 
   const saveComment = async () => {
     if (!article) return
@@ -193,6 +272,8 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     try {
       const result = await apiPatch(`/api/articles/${article.id}/comment`, { comment: commentDraft }) as { comment: string | null; comment_updated_at: string | null }
       await mutate({ ...article, comment: result.comment, comment_updated_at: result.comment_updated_at }, false)
+      syncArticleCaches(article.id, { comment: result.comment, comment_updated_at: result.comment_updated_at })
+      bumpArticleListInvalidationVersion()
       void globalMutate((key: string) => typeof key === 'string' && (
         key.startsWith('/api/feeds') || key.includes('/api/articles')
       ))
@@ -233,7 +314,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
         onToggleBookmark={toggleBookmark}
         onToggleLike={toggleLike}
         onToggleCommentEditor={() => setCommentEditorOpen(open => !open)}
-        onToggleSeen={toggleSeen}
+        onToggleSeen={handleToggleSeen}
         onArchiveImages={handleArchiveImages}
         onDelete={() => setDeleteConfirmOpen(true)}
       />
@@ -324,6 +405,17 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
       <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </article>
     {chatPosition === 'fab' && article && <ChatFab key={article.id} articleId={article.id} />}
+    {isTouchDevice && showScrollToTop && (
+      <Button
+        type="button"
+        size="icon"
+        className={`fixed right-6 z-40 h-11 w-11 rounded-full shadow-lg md:hidden ${chatPosition === 'fab' ? 'bottom-[calc(5.5rem+var(--safe-area-inset-bottom))]' : 'bottom-[calc(1.5rem+var(--safe-area-inset-bottom))]'}`}
+        onClick={scrollToTop}
+        aria-label={t('article.scrollToTop')}
+      >
+        <ChevronUp className="h-5 w-5" />
+      </Button>
+    )}
     {deleteConfirmOpen && (
       <ConfirmDialog
         title={t('article.delete')}
