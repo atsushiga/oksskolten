@@ -5,6 +5,7 @@ const FREE_TIER_CHARS = 500_000
 
 const API_URL = 'https://translation.googleapis.com/language/translate/v2'
 const MAX_CHARS_PER_REQUEST = 30_000
+const MAX_REQUEST_BODY_BYTES = 100 * 1024
 
 export function requireGoogleTranslateKey(): string {
   const key = getSetting('api_key.google_translate')
@@ -26,14 +27,11 @@ export async function googleTranslate(
     text,
     MAX_CHARS_PER_REQUEST,
     async (chunk) => {
+      const body = buildRequestBody(chunk, targetLang)
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify({
-          q: chunk,
-          target: targetLang,
-          format: 'html',
-        }),
+        body: JSON.stringify(body),
       })
 
       if (!res.ok) {
@@ -47,11 +45,24 @@ export async function googleTranslate(
 
       return { translated: json.data.translations[0].translatedText, characters: chunk.length }
     },
+    { isChunkWithinLimit: (chunkHtml) => getRequestBodyBytes(buildRequestBody(chunkHtml, targetLang)) <= MAX_REQUEST_BODY_BYTES },
   )
 
   const monthlyChars = addMonthlyUsage(characters)
 
   return { translatedText: translated, characters, monthlyChars }
+}
+
+function buildRequestBody(chunk: string, targetLang: string) {
+  return {
+    q: chunk,
+    target: targetLang,
+    format: 'html',
+  }
+}
+
+function getRequestBodyBytes(body: unknown): number {
+  return Buffer.byteLength(JSON.stringify(body), 'utf8')
 }
 
 /** Track cumulative monthly character usage. Resets when month changes. */

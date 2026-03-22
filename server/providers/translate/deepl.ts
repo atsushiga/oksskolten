@@ -6,6 +6,7 @@ const FREE_TIER_CHARS = 500_000
 const API_URL_FREE = 'https://api-free.deepl.com/v2/translate'
 const API_URL_PRO = 'https://api.deepl.com/v2/translate'
 const MAX_CHARS_PER_REQUEST = 50_000
+const MAX_REQUEST_BODY_BYTES = 128 * 1024
 
 export function requireDeeplKey(): string {
   const key = getSetting('api_key.deepl')
@@ -33,18 +34,14 @@ export async function deeplTranslate(
     text,
     MAX_CHARS_PER_REQUEST,
     async (chunk) => {
+      const body = buildRequestBody(chunk, targetLang)
       const res = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': `DeepL-Auth-Key ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          text: [chunk],
-          target_lang: targetLang.toUpperCase(),
-          tag_handling: 'xml',
-          ignore_tags: ['code', 'pre', 'img'],
-        }),
+        body: JSON.stringify(body),
       })
 
       if (!res.ok) {
@@ -58,11 +55,33 @@ export async function deeplTranslate(
 
       return { translated: json.translations[0].text, characters: chunk.length }
     },
+    { isChunkWithinLimit: (chunkHtml) => getRequestBodyBytes(buildRequestBody(chunkHtml, targetLang)) <= MAX_REQUEST_BODY_BYTES },
   )
 
   const monthlyChars = addMonthlyUsage(characters)
 
   return { translatedText: translated, characters, monthlyChars }
+}
+
+function buildRequestBody(chunk: string, targetLang: string) {
+  return {
+    text: [protectNonTranslatableHtml(chunk)],
+    target_lang: targetLang.toUpperCase(),
+    tag_handling: 'html',
+  }
+}
+
+function getRequestBodyBytes(body: unknown): number {
+  return Buffer.byteLength(JSON.stringify(body), 'utf8')
+}
+
+function protectNonTranslatableHtml(html: string): string {
+  return html.replace(/<(code|pre|img)(\s[^>]*)?>/g, (match, tag, attrs = '') => {
+    if (/\stranslate\s*=/.test(attrs) || /\sclass\s*=/.test(attrs) && /\bnotranslate\b/.test(attrs)) {
+      return match
+    }
+    return `<${tag}${attrs} translate="no">`
+  })
 }
 
 /** Track cumulative monthly character usage. Resets when month changes. */

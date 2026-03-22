@@ -60,6 +60,18 @@ describe('chunk splitting', () => {
     const result = await translateWithProtection(text, 10, translate)
     expect(result.characters).toBe(300)
   })
+
+  it('splits oversized single paragraphs when provider payload limits require it', async () => {
+    const longLine = 'word '.repeat(500).trim()
+    const translate = vi.fn(identityTranslate)
+
+    await translateWithProtection(longLine, 10_000, translate, {
+      isChunkWithinLimit: (html) => html.length <= 200,
+    })
+
+    expect(translate.mock.calls.length).toBeGreaterThan(1)
+    expect(translate.mock.calls.every(([chunk]) => chunk.length <= 200)).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -83,8 +83,7 @@ describe('deeplTranslate', () => {
     expect(url).toBe('https://api-free.deepl.com/v2/translate')
     const body = JSON.parse(opts.body)
     expect(body.target_lang).toBe('JA')
-    expect(body.tag_handling).toBe('xml')
-    expect(body.ignore_tags).toEqual(['code', 'pre', 'img'])
+    expect(body.tag_handling).toBe('html')
   })
 
   it('uses Pro API URL for non-free keys', async () => {
@@ -123,6 +122,10 @@ describe('deeplTranslate', () => {
 
     const result = await deeplTranslate('Use `console.log` to debug', 'ja')
     expect(result.translatedText).toBe('デバッグには `console.log` を使う')
+
+    const [, opts] = mockFetch.mock.calls[0]
+    const body = JSON.parse(opts.body)
+    expect(body.text[0]).toContain('<code translate="no">console.log</code>')
   })
 
   it('preserves links through translation', async () => {
@@ -142,6 +145,18 @@ describe('deeplTranslate', () => {
     })
 
     await expect(deeplTranslate('test', 'ja')).rejects.toThrow('DeepL API error: 456')
+  })
+
+  it('marks pre/code/img tags as non-translatable in html mode', async () => {
+    setupApiKey()
+    mockDeeplResponse('<pre translate="no"><code translate="no">const x = 1;</code></pre><p>説明</p><img src="https://example.com/a.png" translate="no">')
+
+    await deeplTranslate('```js\nconst x = 1;\n```\n\n説明\n\n![](https://example.com/a.png)', 'ja')
+
+    const [, opts] = mockFetch.mock.calls[0]
+    const body = JSON.parse(opts.body)
+    expect(body.text[0]).toContain('<pre translate="no"><code class="language-js" translate="no">')
+    expect(body.text[0]).toContain('<img src="https://example.com/a.png" alt="" translate="no">')
   })
 
   it('splits long text into chunks', async () => {

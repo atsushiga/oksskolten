@@ -22,6 +22,10 @@ export interface TranslateResult {
   characters: number
 }
 
+export interface TranslateWithProtectionOptions {
+  isChunkWithinLimit?: (chunkHtml: string) => boolean
+}
+
 /**
  * High-level orchestrator.
  * Providers only need to supply a chunk-level translation callback.
@@ -30,15 +34,22 @@ export async function translateWithProtection(
   text: string,
   maxCharsPerRequest: number,
   translateChunk: TranslateChunkFn,
+  options?: TranslateWithProtectionOptions,
 ): Promise<TranslateResult> {
-  // Split at Markdown level first, then convert each chunk to HTML
-  const mdChunks = splitIntoChunks(text, maxCharsPerRequest)
+  // Split at Markdown level first, then refine further if provider-specific
+  // request-size constraints reject the rendered HTML chunk.
+  const pendingChunks = splitIntoChunks(text, maxCharsPerRequest)
 
   const translatedHtmlParts: string[] = []
   let totalCharacters = 0
 
-  for (const mdChunk of mdChunks) {
+  while (pendingChunks.length > 0) {
+    const mdChunk = pendingChunks.shift()!
     const html = await marked(mdChunk)
+    if (options?.isChunkWithinLimit && !options.isChunkWithinLimit(html) && mdChunk.length > 1) {
+      prependChunks(pendingChunks, splitChunkSmaller(mdChunk))
+      continue
+    }
     const result = await translateChunk(html)
     translatedHtmlParts.push(result.translated)
     totalCharacters += result.characters
@@ -81,4 +92,52 @@ function splitIntoChunks(text: string, maxChars: number): string[] {
   if (current) chunks.push(current)
 
   return chunks
+}
+
+function prependChunks(queue: string[], chunks: string[]) {
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    queue.unshift(chunks[i])
+  }
+}
+
+function splitChunkSmaller(text: string): string[] {
+  const byParagraph = splitAtNearestBoundary(text, /\n\n/g)
+  if (byParagraph) return byParagraph
+
+  const byLine = splitAtNearestBoundary(text, /\n/g)
+  if (byLine) return byLine
+
+  const bySentence = splitAtNearestBoundary(text, /(?<=[.!?。！？])\s+/g)
+  if (bySentence) return bySentence
+
+  const byWhitespace = splitAtNearestBoundary(text, /\s+/g)
+  if (byWhitespace) return byWhitespace
+
+  const middle = Math.floor(text.length / 2)
+  return [text.slice(0, middle), text.slice(middle)]
+}
+
+function splitAtNearestBoundary(text: string, pattern: RegExp): [string, string] | null {
+  const boundaries: number[] = []
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index
+    if (index == null) continue
+    boundaries.push(index + match[0].length)
+  }
+  if (boundaries.length === 0) return null
+
+  const middle = text.length / 2
+  let splitIndex = boundaries[0]
+  for (const boundary of boundaries) {
+    if (boundary <= 0 || boundary >= text.length) continue
+    if (Math.abs(boundary - middle) < Math.abs(splitIndex - middle)) {
+      splitIndex = boundary
+    }
+  }
+  if (splitIndex <= 0 || splitIndex >= text.length) return null
+
+  const left = text.slice(0, splitIndex).trimEnd()
+  const right = text.slice(splitIndex).trimStart()
+  if (!left || !right) return null
+  return [left, right]
 }
