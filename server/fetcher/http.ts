@@ -22,7 +22,13 @@ export async function fetchHtml(url: string, opts?: {
   useFlareSolverr?: boolean
 }): Promise<FetchHtmlResult> {
   const timeout = opts?.timeout ?? DEFAULT_TIMEOUT
-  const siteAccessHeaders = getSiteAccessHeaders(url)
+  let siteAccessHeaders: Record<string, string> = {}
+  try {
+    siteAccessHeaders = getSiteAccessHeaders(url)
+  } catch {
+    // Feed discovery should still work in environments where settings storage is unavailable.
+    siteAccessHeaders = {}
+  }
   const hasSiteAccess = Object.keys(siteAccessHeaders).length > 0
 
   // Go straight to FlareSolverr if requested

@@ -254,14 +254,14 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
       syncArticleCaches(article.id, { bookmarked_at: isBookmarked ? null : new Date().toISOString() })
       bumpArticleListInvalidationVersion()
     }
-    toggleBookmark()
+    void toggleBookmark()
   }
   const handleToggleLike = () => {
     if (article) {
       syncArticleCaches(article.id, { liked_at: isLiked ? null : new Date().toISOString() })
       bumpArticleListInvalidationVersion()
     }
-    toggleLike()
+    void toggleLike()
   }
   const handleToggleSeen = () => {
     if (article) {
@@ -271,7 +271,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
       })
       bumpArticleListInvalidationVersion()
     }
-    toggleSeen()
+    void toggleSeen()
   }
 
   const saveComment = async () => {

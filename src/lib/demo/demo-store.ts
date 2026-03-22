@@ -94,6 +94,7 @@ interface SeedArticle {
   url: string
   full_text: string | null
   full_text_translated: string | null
+  translated_lang: string | null
   summary: string | null
   summary_ja: string | null
   excerpt: string | null
@@ -167,6 +168,7 @@ function createArticle(overrides: Partial<SeedArticle> & Pick<SeedArticle, 'feed
     id: nextArticleId++,
     full_text: null,
     full_text_translated: null,
+    translated_lang: null,
     summary: null,
     summary_ja: null,
     excerpt: null,
