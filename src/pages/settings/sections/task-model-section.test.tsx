@@ -83,4 +83,33 @@ describe('TaskModelSection', () => {
     expect(settings.setTranslateProvider).toHaveBeenCalledWith('deepl')
     expect(settings.setTranslateModel).toHaveBeenCalledWith('')
   })
+
+  it('uses task-specific OpenAI defaults when OpenAI is selected', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    const settings = makeSettings()
+
+    swrMock.mockImplementation((key: string) => {
+      if (key === '/api/settings/api-keys/anthropic') return { data: { configured: true } }
+      if (key === '/api/settings/api-keys/gemini') return { data: { configured: false } }
+      if (key === '/api/settings/api-keys/openai') return { data: { configured: true } }
+      if (key === '/api/settings/api-keys/google-translate') return { data: { configured: false } }
+      if (key === '/api/settings/api-keys/deepl') return { data: { configured: false } }
+      if (key === '/api/chat/claude-code-status') return { data: { loggedIn: false } }
+      return { data: undefined }
+    })
+
+    render(<TaskModelSection settings={settings} t={t} />)
+
+    const openaiButtons = screen.getAllByRole('button', { name: 'provider.openai' })
+    await user.click(openaiButtons[0])
+    await user.click(openaiButtons[1])
+    await user.click(openaiButtons[2])
+
+    expect(settings.setChatProvider).toHaveBeenCalledWith('openai')
+    expect(settings.setChatModel).toHaveBeenCalledWith('gpt-5.4-mini')
+    expect(settings.setSummaryProvider).toHaveBeenCalledWith('openai')
+    expect(settings.setSummaryModel).toHaveBeenCalledWith('gpt-5.4-nano')
+    expect(settings.setTranslateProvider).toHaveBeenCalledWith('openai')
+    expect(settings.setTranslateModel).toHaveBeenCalledWith('gpt-5.4-mini')
+  })
 })

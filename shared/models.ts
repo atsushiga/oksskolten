@@ -39,6 +39,8 @@ export const GEMINI_MODELS: ModelGroup[] = [
 export const OPENAI_MODELS: ModelGroup[] = [
   { group: 'Latest', models: [
     { value: 'gpt-5.4', label: 'GPT-5.4', pricing: [2.50, 15] },
+    { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', pricing: [0.75, 3] },
+    { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', pricing: [0.20, 0.80] },
     { value: 'gpt-5.3', label: 'GPT-5.3', pricing: [1.75, 14] },
     { value: 'gpt-5-mini', label: 'GPT-5 Mini', pricing: [0.25, 2] },
     { value: 'gpt-5-nano', label: 'GPT-5 Nano', pricing: [0.05, 0.40] },
@@ -64,7 +66,7 @@ export const MODELS_BY_PROVIDER: Record<string, ModelGroup[]> = {
 export const DEFAULT_MODELS: Record<string, string> = {
   anthropic: 'claude-haiku-4-5-20251001',
   gemini: 'gemini-2.5-flash',
-  openai: 'gpt-4.1-mini',
+  openai: 'gpt-5.4-mini',
   'claude-code': 'claude-haiku-4-5-20251001',
   'google-translate': '',
   deepl: '',

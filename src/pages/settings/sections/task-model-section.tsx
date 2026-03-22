@@ -20,6 +20,7 @@ type TFunc = TranslateFn
 type MessageKey = Parameters<TFunc>[0]
 
 interface TaskConfig {
+  taskKey: 'chat' | 'summary' | 'translate'
   labelKey: MessageKey
   providerValue: string
   setProvider: (v: string) => void
@@ -65,33 +66,36 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
 
   const tasks: TaskConfig[] = [
     {
+      taskKey: 'chat',
       labelKey: 'integration.task.chat',
       providerValue: settings.chatProvider || '',
       setProvider: (v) => {
         settings.setChatProvider(v)
-        settings.setChatModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
+        settings.setChatModel(getDefaultTaskModel('chat', v))
       },
       modelValue: settings.chatModel || '',
       setModel: settings.setChatModel,
       defaultModel: 'claude-haiku-4-5-20251001',
     },
     {
+      taskKey: 'summary',
       labelKey: 'integration.task.summary',
       providerValue: settings.summaryProvider || '',
       setProvider: (v) => {
         settings.setSummaryProvider(v)
-        settings.setSummaryModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
+        settings.setSummaryModel(getDefaultTaskModel('summary', v))
       },
       modelValue: settings.summaryModel || '',
       setModel: settings.setSummaryModel,
       defaultModel: 'claude-haiku-4-5-20251001',
     },
     {
+      taskKey: 'translate',
       labelKey: 'integration.task.translate',
       providerValue: settings.translateProvider || '',
       setProvider: (v) => {
         settings.setTranslateProvider(v)
-        settings.setTranslateModel(getDefaultModel(v))
+        settings.setTranslateModel(getDefaultTaskModel('translate', v))
       },
       modelValue: settings.translateModel || '',
       setModel: settings.setTranslateModel,
@@ -162,6 +166,14 @@ function getDefaultProvider(
 function getDefaultModel(provider: string): string {
   if (isTranslateService(provider)) return ''
   return DEFAULT_MODELS[provider] || DEFAULT_MODELS.anthropic
+}
+
+function getDefaultTaskModel(task: TaskConfig['taskKey'], provider: string): string {
+  if (provider === 'openai') {
+    if (task === 'summary') return 'gpt-5.4-nano'
+    return 'gpt-5.4-mini'
+  }
+  return getDefaultModel(provider)
 }
 
 /* ── Task Model Row ── */
