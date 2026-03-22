@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ActionChip } from '../ui/action-chip'
 import { ChatInlineTrigger } from '../chat/chat-inline'
-import { Bookmark, ThumbsUp, CloudUpload, CloudCheck, Trash2, Languages, Sparkles, RotateCcw, Check, MessageSquare } from 'lucide-react'
+import { Bookmark, ThumbsUp, CloudUpload, CloudCheck, Trash2, Languages, Sparkles, RotateCcw, Check, MessageSquare, RefreshCw } from 'lucide-react'
 import { useI18n } from '../../lib/i18n'
 import type { ArticleDetail } from '../../../shared/types'
 
@@ -22,11 +22,13 @@ interface ArticleToolbarProps {
   isSeen: boolean
   showCommentEditor: boolean
   archivingImages: boolean
+  refetching: boolean
   onToggleBookmark: () => void
   onToggleLike: () => void
   onToggleCommentEditor: () => void
   onToggleSeen: () => void
   onArchiveImages: () => void
+  onRefetch: () => void
   onDelete: () => void
 }
 
@@ -47,11 +49,13 @@ export function ArticleToolbar({
   isSeen,
   showCommentEditor,
   archivingImages,
+  refetching,
   onToggleBookmark,
   onToggleLike,
   onToggleCommentEditor,
   onToggleSeen,
   onArchiveImages,
+  onRefetch,
   onDelete,
 }: ArticleToolbarProps) {
   const navigate = useNavigate()
@@ -109,6 +113,10 @@ export function ArticleToolbar({
       <ActionChip onClick={onToggleSeen} tooltip={isSeen ? t('article.markUnread') : t('article.markRead')}>
         {isSeen ? <RotateCcw className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
         {isSeen ? t('article.markUnread') : t('article.markRead')}
+      </ActionChip>
+      <ActionChip onClick={onRefetch} disabled={refetching} tooltip={t('article.refetch')}>
+        <RefreshCw className={`w-3.5 h-3.5${refetching ? ' animate-spin' : ''}`} />
+        {refetching ? t('article.refetching') : t('article.refetch')}
       </ActionChip>
       {article.imageArchivingEnabled && article.full_text && /(<img\s|!\[)/.test(article.full_text) && !article.images_archived_at && !archivingImages && (
         <ActionChip onClick={onArchiveImages} tooltip={t('article.archiveImages')}>

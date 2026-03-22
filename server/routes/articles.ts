@@ -20,11 +20,13 @@ import {
   updateScore,
   getExistingArticleUrls,
   getClipFeed,
+  getFeedById,
   insertArticle,
   deleteArticle,
   deleteArticles,
   getSimilarArticles,
   getDb,
+  clearImagesArchived,
   type ArticleDetail,
 } from '../db.js'
 import type { MeiliArticleDoc } from '../search/client.js'
@@ -33,6 +35,8 @@ import { isSearchReady, syncArticleToSearch } from '../search/sync.js'
 import { requireJson } from '../auth.js'
 import { summarizeArticle, translateArticle, streamSummarizeArticle, streamTranslateArticle, fetchArticleContent } from '../fetcher.js'
 import type { AiTextResult } from '../fetcher.js'
+import { fetchAndParseRss } from '../fetcher/rss.js'
+import { cleanUrl } from '../fetcher/url-cleaner.js'
 import { archiveArticleImages, isImageArchivingEnabled, deleteArticleImages } from '../fetcher/article-images.js'
 import { getSetting } from '../db/settings.js'
 import path from 'node:path'
@@ -115,6 +119,9 @@ const BatchSeenBody = z.object({
 const BatchDeleteBody = z.object({
   ids: z.array(z.number()).min(1, 'ids must be a non-empty array').max(MAX_BATCH_SEEN, `Maximum ${MAX_BATCH_SEEN} ids per request`),
 })
+const BatchRefetchBody = z.object({
+  ids: z.array(z.number()).min(1, 'ids must be a non-empty array').max(MAX_BATCH_SEEN, `Maximum ${MAX_BATCH_SEEN} ids per request`),
+})
 const StreamQuery = z.object({ stream: z.string().optional() })
 const FilenameParams = z.object({ filename: z.string() })
 
@@ -136,6 +143,13 @@ function extractKnownErrorCode(err: unknown): string | null {
     const code = (err as Error & { code?: string }).code
     if (code && KNOWN_ERROR_CODES.has(code)) return code
   }
+  return null
+}
+
+function extractClientErrorMessage(err: unknown): string | null {
+  if (!(err instanceof Error)) return null
+  if (err.message.startsWith('DeepL API error:')) return err.message
+  if (err.message.startsWith('Google Translate API error:')) return err.message
   return null
 }
 
@@ -198,7 +212,8 @@ function createAiHandler(config: AiHandlerConfig) {
     } catch (err) {
       request.log.error(err, config.errorMessage)
       const errorCode = extractKnownErrorCode(err)
-      const errorMsg = errorCode ?? config.errorCode
+      const clientError = extractClientErrorMessage(err)
+      const errorMsg = errorCode ?? clientError ?? config.errorCode
       if (reply.raw.headersSent) {
         reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: errorMsg })}\n\n`)
         reply.raw.end()
@@ -217,6 +232,53 @@ function formatUsage(result: AiTextResult) {
     model: result.model,
     ...(result.monthlyChars != null ? { monthly_chars: result.monthlyChars } : {}),
   }
+}
+
+async function findRssListingExcerpt(article: ArticleDetail): Promise<string | undefined> {
+  if (article.feed_type !== 'rss') return undefined
+  const feed = getFeedById(article.feed_id)
+  if (!feed) return undefined
+
+  try {
+    const rss = await fetchAndParseRss(feed, { skipCache: true })
+    const targetUrl = cleanUrl(article.url)
+    const match = rss.items.find((item) => cleanUrl(item.url) === targetUrl)
+    return match?.excerpt
+  } catch {
+    return undefined
+  }
+}
+
+async function refetchArticleContent(
+  article: ArticleDetail,
+  request: FastifyRequest,
+): Promise<ArticleDetail | undefined> {
+  const listingExcerpt = await findRssListingExcerpt(article)
+  const content = await fetchArticleContent(article.url, {
+    listingExcerpt,
+  })
+
+  if (article.images_archived_at) {
+    try {
+      deleteArticleImages(article.id)
+    } catch (err) {
+      request.log.error(err, 'Failed to delete archived images during refetch')
+    }
+    clearImagesArchived(article.id)
+  }
+
+  updateArticleContent(article.id, {
+    lang: content.lang,
+    full_text: content.fullText,
+    full_text_translated: null,
+    translated_lang: null,
+    summary: null,
+    excerpt: content.excerpt,
+    og_image: content.ogImage,
+    last_error: content.lastError,
+  })
+
+  return getArticleById(article.id)
 }
 
 export async function articleRoutes(api: FastifyInstance): Promise<void> {
@@ -317,6 +379,30 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
       const existing = getArticleByUrl(body.url)
       if (existing) {
         if (existing.feed_type === 'clip') {
+          if (body.html) {
+            const content = await fetchArticleContent(body.url, { providedHtml: body.html })
+            if (existing.images_archived_at) {
+              try {
+                deleteArticleImages(existing.id)
+              } catch (err) {
+                request.log.error(err, 'Failed to delete archived images during clip refresh')
+              }
+              clearImagesArchived(existing.id)
+            }
+            updateArticleContent(existing.id, {
+              lang: content.lang,
+              full_text: content.fullText,
+              full_text_translated: null,
+              translated_lang: null,
+              summary: null,
+              excerpt: content.excerpt,
+              og_image: content.ogImage,
+              last_error: content.lastError,
+            })
+            const refreshed = getArticleById(existing.id)
+            reply.status(200).send({ article: refreshed, refetched: true })
+            return
+          }
           // Already in clips — block
           reply.status(409).send({ error: 'Article already exists', article: existing })
           return
@@ -340,6 +426,28 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
           getDb().prepare('UPDATE articles SET feed_id = ?, category_id = NULL WHERE id = ?').run(clipFeed.id, existing.id)
           return getArticleById(existing.id)
         })()
+        if (body.html) {
+          const content = await fetchArticleContent(body.url, { providedHtml: body.html })
+          if (existing.images_archived_at) {
+            try {
+              deleteArticleImages(existing.id)
+            } catch (err) {
+              request.log.error(err, 'Failed to delete archived images during clip move refresh')
+            }
+            clearImagesArchived(existing.id)
+          }
+          updateArticleContent(existing.id, {
+            lang: content.lang,
+            full_text: content.fullText,
+            full_text_translated: null,
+            translated_lang: null,
+            summary: null,
+            excerpt: content.excerpt,
+            og_image: content.ogImage,
+            last_error: content.lastError,
+          })
+        }
+        const movedArticle = getArticleById(existing.id) ?? moved
         // Sync clip move to Meilisearch (best-effort, outside transaction)
         const movedDoc = getDb().prepare(`
           SELECT id, feed_id, category_id, title,
@@ -351,7 +459,7 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
           FROM articles WHERE id = ?
         `).get(existing.id) as MeiliArticleDoc | undefined
         if (movedDoc) syncArticleToSearch(movedDoc)
-        reply.status(200).send({ article: moved, moved: true })
+        reply.status(200).send({ article: movedArticle, moved: true, ...(body.html ? { refetched: true } : {}) })
         return
       }
 
@@ -382,6 +490,53 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
 
       const article = getArticleById(articleId)
       reply.status(201).send({ article, created: true })
+    },
+  )
+
+  api.post(
+    '/api/articles/:id/refetch',
+    async (request, reply) => {
+      const params = parseOrBadRequest(NumericIdParams, request.params, reply)
+      if (!params) return
+      const article = getArticleById(params.id)
+      if (!article) {
+        reply.status(404).send({ error: 'Article not found' })
+        return
+      }
+
+      const updated = await refetchArticleContent(article, request)
+      reply.send({ article: updated, refetched: true })
+    },
+  )
+
+  api.post(
+    '/api/articles/batch-refetch',
+    { preHandler: [requireJson] },
+    async (request, reply) => {
+      const body = parseOrBadRequest(BatchRefetchBody, request.body, reply)
+      if (!body) return
+
+      const results: Array<{ id: number; ok: boolean; error?: string }> = []
+      for (const id of body.ids) {
+        const article = getArticleById(id)
+        if (!article) {
+          results.push({ id, ok: false, error: 'Article not found' })
+          continue
+        }
+        try {
+          await refetchArticleContent(article, request)
+          results.push({ id, ok: true })
+        } catch (err) {
+          request.log.error(err, `Failed to batch refetch article ${id}`)
+          results.push({ id, ok: false, error: err instanceof Error ? err.message : 'Refetch failed' })
+        }
+      }
+
+      reply.send({
+        success: results.filter((result) => result.ok).length,
+        failed: results.filter((result) => !result.ok).length,
+        results,
+      })
     },
   )
 

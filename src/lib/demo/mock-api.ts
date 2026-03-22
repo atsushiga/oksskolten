@@ -240,6 +240,12 @@ export async function demoApiPost(url: string, body?: unknown): Promise<unknown>
     return demoStore.batchSeen(ids)
   }
 
+  // /api/articles/batch-refetch
+  if (path === '/api/articles/batch-refetch') {
+    const { ids } = asBody<{ ids: number[] }>(body)
+    return demoStore.batchRefetch(ids)
+  }
+
   // AI features — return demo message (actual streaming happens via streamPost/streamPostChat)
   if (path.match(/^\/api\/articles\/\d+\/summarize/)) {
     return { text: dt('demo.summaryReply'), cached: true }

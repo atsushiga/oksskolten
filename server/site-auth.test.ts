@@ -33,12 +33,14 @@ describe('site auth profile matching', () => {
       ],
     })
 
-    expect(getSiteAccessHeaders('https://note.com/foo')).toEqual({
+    expect(getSiteAccessHeaders('https://note.com/foo')).toEqual(expect.objectContaining({
       Cookie: '_note_session_v5=abc',
-    })
-    expect(getSiteAccessHeaders('https://www.nikkei.com/bar')).toEqual({
+      Referer: 'https://note.com',
+    }))
+    expect(getSiteAccessHeaders('https://www.nikkei.com/bar')).toEqual(expect.objectContaining({
       Cookie: 'nikkei_session=xyz',
-    })
+      Referer: 'https://www.nikkei.com',
+    }))
   })
 
   it('does not return cookies for non-matching domains', () => {
@@ -76,8 +78,81 @@ describe('site auth profile matching', () => {
     })
     expect(getSiteAccessHeaders('https://note.com/premium/test')).toEqual({
       'User-Agent': 'Mozilla/5.0 Chrome/145.0.0.0',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
       Cookie: '_note_session_v5=abc; apay-session-set=def',
+      Pragma: 'no-cache',
+      Referer: 'https://note.com',
+      'Upgrade-Insecure-Requests': '1',
     })
+  })
+
+  it('ignores imported cookies whose path does not match the requested page', () => {
+    importSiteAccessCookieSession({
+      url: 'https://note.com/premium/test',
+      profileName: 'note.com',
+      cookies: [
+        { name: '_note_session_v5', value: 'abc', domain: '.note.com', path: '/' },
+        { name: 'preview_token', value: 'skip', domain: '.note.com', path: '/settings' },
+      ],
+    })
+
+    expect(getSiteAccessHeaders('https://note.com/premium/test')).toEqual({
+      'User-Agent': expect.stringContaining('Chrome'),
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
+      Cookie: '_note_session_v5=abc',
+      Pragma: 'no-cache',
+      Referer: 'https://note.com',
+      'Upgrade-Insecure-Requests': '1',
+    })
+  })
+
+  it('deduplicates imported cookies with the same name by keeping the most specific match', () => {
+    importSiteAccessCookieSession({
+      url: 'https://note.com/premium/test',
+      profileName: 'note.com',
+      cookies: [
+        { name: '_note_session_v5', value: 'root', domain: '.note.com', path: '/' },
+        { name: '_note_session_v5', value: 'premium', domain: '.note.com', path: '/premium' },
+        { name: 'apay-session-set', value: 'def', domain: '.note.com', path: '/' },
+      ],
+    })
+
+    expect(getSiteAccessHeaders('https://note.com/premium/test')).toEqual({
+      'User-Agent': expect.stringContaining('Chrome'),
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
+      Cookie: '_note_session_v5=premium; apay-session-set=def',
+      Pragma: 'no-cache',
+      Referer: 'https://note.com',
+      'Upgrade-Insecure-Requests': '1',
+    })
+  })
+
+  it('imports note cookies for a custom domain when cookieUrl points to note.com', () => {
+    const profile = importSiteAccessCookieSession({
+      url: 'https://chatgpt-lab.com/n/n3f74bf9ed9fd',
+      cookieUrl: 'https://note.com/',
+      profileName: 'chatgpt-lab.com',
+      targetDomains: ['chatgpt-lab.com'],
+      cookies: [
+        { name: '_note_session_v5', value: 'abc', domain: '.note.com', path: '/' },
+        { name: 'apay-session-set', value: 'def', domain: 'note.com', path: '/' },
+      ],
+    })
+
+    expect(profile).toMatchObject({
+      name: 'chatgpt-lab.com',
+      targetDomains: expect.arrayContaining(['chatgpt-lab.com', 'note.com']),
+    })
+    expect(getSiteAccessHeaders('https://chatgpt-lab.com/n/n3f74bf9ed9fd')).toEqual(expect.objectContaining({
+      Cookie: '_note_session_v5=abc; apay-session-set=def',
+      Referer: 'https://chatgpt-lab.com',
+    }))
   })
 
   it('classifies 403 as rejected authentication during test', async () => {

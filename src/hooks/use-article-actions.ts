@@ -13,6 +13,7 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
   const [optimisticLiked, setOptimisticLiked] = useState<string | null | undefined>(undefined)
   const [optimisticSeen, setOptimisticSeen] = useState<boolean | undefined>(undefined)
   const [archivingImages, setArchivingImages] = useState(false)
+  const [refetching, setRefetching] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const isBookmarked = optimisticBookmark !== undefined ? optimisticBookmark : !!article?.bookmarked_at
@@ -94,6 +95,7 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
       revalidateLists()
     } catch {
       setOptimisticSeen(undefined)
+      clearArticleOverride(article.id, ['seen_at', 'read_at'])
       void globalMutate(articleKey)
     }
   }, [article, articleKey, globalMutate, isSeen, revalidateLists])
@@ -111,6 +113,18 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
       setArchivingImages(false)
     }
   }, [article, articleKey, archivingImages, globalMutate])
+
+  const handleRefetch = useCallback(async () => {
+    if (!article || refetching) return
+    setRefetching(true)
+    try {
+      await apiPost(`/api/articles/${article.id}/refetch`)
+      await globalMutate(articleKey)
+      revalidateLists()
+    } finally {
+      setRefetching(false)
+    }
+  }, [article, articleKey, globalMutate, refetching, revalidateLists])
 
   const handleDelete = useCallback(() => {
     if (!article) return
@@ -131,12 +145,14 @@ export function useArticleActions(article: ArticleDetail | undefined, articleKey
     isLiked,
     isSeen,
     archivingImages,
+    refetching,
     deleteConfirmOpen,
     setDeleteConfirmOpen,
     toggleBookmark,
     toggleLike,
     toggleSeen,
     handleArchiveImages,
+    handleRefetch,
     handleDelete,
   }
 }

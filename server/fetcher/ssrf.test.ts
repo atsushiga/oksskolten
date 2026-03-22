@@ -180,8 +180,39 @@ describe('safeFetch', () => {
     await safeFetch('http://example.com', { headers: { 'X-Test': '1' }, signal })
     expect(mockFetch).toHaveBeenCalledWith(
       'http://example.com',
-      expect.objectContaining({ headers: { 'X-Test': '1' }, signal, redirect: 'manual' }),
+      expect.objectContaining({ headers: expect.any(Headers), signal, redirect: 'manual' }),
     )
+    const firstHeaders = mockFetch.mock.calls[0]?.[1]?.headers as Headers
+    expect(firstHeaders.get('X-Test')).toBe('1')
+  })
+
+  it('updates Cookie header from Set-Cookie across redirects', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: {
+            location: 'https://note.com/cd/sessions',
+            'set-cookie': '_note_session_v5=rotated; Path=/; HttpOnly; Secure',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    await safeFetch('https://chatgpt-lab.com/n/test', {
+      headers: { Cookie: '_note_session_v5=old; apay-session-set=abc' },
+    })
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://note.com/cd/sessions',
+      expect.objectContaining({
+        headers: expect.any(Headers),
+        redirect: 'manual',
+      }),
+    )
+    const secondHeaders = mockFetch.mock.calls[1]?.[1]?.headers as Headers
+    expect(secondHeaders.get('Cookie')).toBe('_note_session_v5=rotated; apay-session-set=abc')
   })
 
   it('validates each hop in a redirect chain', async () => {

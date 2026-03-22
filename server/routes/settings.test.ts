@@ -782,6 +782,34 @@ describe('site access settings', () => {
     })
   })
 
+  it('imports note cookies for a note-backed custom domain', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/settings/site-access/import-session',
+      headers: json,
+      payload: {
+        url: 'https://chatgpt-lab.com/n/n3f74bf9ed9fd',
+        cookieUrl: 'https://note.com/',
+        profileName: 'chatgpt-lab.com',
+        targetDomains: ['chatgpt-lab.com'],
+        userAgent: 'Mozilla/5.0 Chrome/145.0.0.0',
+        cookies: [
+          { name: '_note_session_v5', value: 'abc', domain: '.note.com', path: '/' },
+          { name: 'apay-session-set', value: 'def', domain: 'note.com', path: '/' },
+        ],
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      imported_cookie_count: 2,
+      profile: {
+        name: 'chatgpt-lab.com',
+        targetDomains: expect.arrayContaining(['chatgpt-lab.com', 'note.com']),
+      },
+    })
+  })
+
 })
 
 // =========================================================================

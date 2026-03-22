@@ -284,17 +284,26 @@ export function getSiteAccessProfileForUrl(url: string): SiteAccessProfile | nul
 export function getSiteAccessHeaders(url: string): Record<string, string> {
   const match = getSiteAccessProfileForUrl(url)
   if (!match?.cookie) return {}
-  return {
-    ...(match.userAgent ? { 'User-Agent': match.userAgent } : {}),
-    Cookie: match.cookie,
-  }
+  return buildBrowserHeaders(url, match.cookie, match.userAgent || TEST_USER_AGENT)
 }
 
 function normalizeCookieDomain(input: string): string {
   return normalizeDomain(input.replace(/^\./, ''))
 }
 
-function buildCookieHeader(cookies: ImportedSiteCookie[], hostname: string): string {
+function pathMatches(requestPath: string, cookiePath: string): boolean {
+  if (!cookiePath.startsWith('/')) return false
+  if (requestPath === cookiePath) return true
+  if (!requestPath.startsWith(cookiePath)) return false
+  if (cookiePath.endsWith('/')) return true
+  return requestPath.charAt(cookiePath.length) === '/'
+}
+
+function buildCookieHeader(cookies: ImportedSiteCookie[], requestUrl: URL): string {
+  const hostname = requestUrl.hostname.toLowerCase()
+  const pathname = requestUrl.pathname || '/'
+  const seenNames = new Set<string>()
+
   return cookies
     .map(cookie => ({
       name: cookie.name.trim(),
@@ -304,11 +313,17 @@ function buildCookieHeader(cookies: ImportedSiteCookie[], hostname: string): str
     }))
     .filter(cookie => cookie.name && cookie.value !== '')
     .filter(cookie => !cookie.domain || hostname === cookie.domain || hostname.endsWith(`.${cookie.domain}`))
+    .filter(cookie => pathMatches(pathname, cookie.path))
     .sort((a, b) =>
       (b.path.length - a.path.length) ||
       ((b.domain?.length ?? 0) - (a.domain?.length ?? 0)) ||
       a.name.localeCompare(b.name),
     )
+    .filter((cookie) => {
+      if (seenNames.has(cookie.name)) return false
+      seenNames.add(cookie.name)
+      return true
+    })
     .map(cookie => `${cookie.name}=${cookie.value}`)
     .join('; ')
 }
@@ -327,19 +342,28 @@ function deriveTargetDomains(url: string, cookies: ImportedSiteCookie[]): string
 
 export function importSiteAccessCookieSession(input: {
   url: string
+  cookieUrl?: string | null
   profileName?: string | null
+  targetDomains?: string[]
   userAgent?: string | null
   cookies: ImportedSiteCookie[]
 }): SiteAccessProfile {
   const url = input.url.trim()
   const parsed = new URL(url)
   if (parsed.protocol !== 'https:') throw new Error('Only https:// URLs are supported')
+  const cookieSourceUrl = input.cookieUrl?.trim() || url
+  const cookieSourceParsed = new URL(cookieSourceUrl)
+  if (cookieSourceParsed.protocol !== 'https:') throw new Error('Only https:// cookie URLs are supported')
 
   const hostname = parsed.hostname.toLowerCase()
-  const cookie = buildCookieHeader(input.cookies, hostname)
+  const cookie = buildCookieHeader(input.cookies, cookieSourceParsed)
   if (!cookie) throw new Error('No matching cookies found for the requested URL')
 
-  const targetDomains = deriveTargetDomains(url, input.cookies)
+  const targetDomains = [...new Set([
+    hostname,
+    ...deriveTargetDomains(cookieSourceParsed.href, input.cookies),
+    ...((input.targetDomains || []).map(normalizeDomain).filter(Boolean)),
+  ])]
   const current = readStoredProfiles()
   const existingIndex = current.findIndex(profile => matchesTargetDomain(url, profile.targetDomains))
   const existing = existingIndex >= 0 ? current[existingIndex] : null

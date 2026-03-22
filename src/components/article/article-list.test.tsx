@@ -542,4 +542,31 @@ describe('ArticleList', () => {
       expect(mockApiPost).toHaveBeenCalledWith('/api/articles/batch-seen', { ids: [1], seen: false })
     })
   })
+
+  it('calls batch refetch for selected articles', async () => {
+    swrInfiniteReturn = {
+      data: [{
+        articles: [
+          makeArticle({ id: 1, title: 'First' }),
+          makeArticle({ id: 2, title: 'Second' }),
+        ],
+        total: 2,
+        has_more: false,
+      }],
+      error: undefined,
+      size: 1,
+      setSize: vi.fn(),
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+    }
+    renderArticleList()
+
+    fireEvent.click(screen.getAllByLabelText('Select all')[1])
+    fireEvent.click(screen.getByText('Refetch'))
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/api/articles/batch-refetch', { ids: [1] })
+    })
+  })
 })

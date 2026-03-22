@@ -40,12 +40,53 @@ export async function assertSafeUrl(url: string): Promise<void> {
 
 const MAX_REDIRECTS = 5
 
+function parseCookieHeader(value: string): Map<string, string> {
+  const cookies = new Map<string, string>()
+  for (const part of value.split(';')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const eq = trimmed.indexOf('=')
+    if (eq <= 0) continue
+    cookies.set(trimmed.slice(0, eq), trimmed.slice(eq + 1))
+  }
+  return cookies
+}
+
+function parseSetCookieNameValue(value: string): { name: string; value: string } | null {
+  const first = value.split(';', 1)[0]?.trim()
+  if (!first) return null
+  const eq = first.indexOf('=')
+  if (eq <= 0) return null
+  return {
+    name: first.slice(0, eq).trim(),
+    value: first.slice(eq + 1),
+  }
+}
+
+function getSetCookieValues(res: Response): string[] {
+  const headers = res.headers as Headers & { getSetCookie?: () => string[] }
+  if (typeof headers.getSetCookie === 'function') return headers.getSetCookie()
+  const single = res.headers.get('set-cookie')
+  return single ? [single] : []
+}
+
 export async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
   await assertSafeUrl(url)
   let currentUrl = url
+  const headers = new Headers(init?.headers)
   for (let i = 0; i < MAX_REDIRECTS; i++) {
-    const res = await fetch(currentUrl, { ...init, redirect: 'manual' })
+    const res = await fetch(currentUrl, { ...init, headers, redirect: 'manual' })
     if (res.status >= 300 && res.status < 400) {
+      const setCookies = getSetCookieValues(res)
+      if (setCookies.length > 0 && headers.has('Cookie')) {
+        const merged = parseCookieHeader(headers.get('Cookie') || '')
+        for (const setCookie of setCookies) {
+          const parsed = parseSetCookieNameValue(setCookie)
+          if (!parsed) continue
+          merged.set(parsed.name, parsed.value)
+        }
+        headers.set('Cookie', [...merged.entries()].map(([name, value]) => `${name}=${value}`).join('; '))
+      }
       const location = res.headers.get('location')
       if (!location) throw new Error(`Redirect without Location header from ${currentUrl}`)
       currentUrl = new URL(location, currentUrl).href

@@ -79,6 +79,17 @@ function shouldSyncCookies(pageUrl) {
   }
 }
 
+function looksLikeNoteCustomDomain(pageUrl, pageHtml) {
+  if (typeof pageHtml !== "string" || pageHtml.length === 0) return false;
+  try {
+    const hostname = new URL(pageUrl).hostname.toLowerCase();
+    if (hostname === "note.com" || hostname.endsWith(".note.com")) return false;
+  } catch {
+    return false;
+  }
+  return /note:\/\/note\/|data-note-id=|data-note-key=|window\.__NUXT__|note（ノート）/.test(pageHtml);
+}
+
 function getCookies(pageUrl) {
   return new Promise((resolve, reject) => {
     chrome.cookies.getAll({ url: pageUrl }, (cookies) => {
@@ -109,10 +120,30 @@ function getTabUserAgent(tabId) {
   });
 }
 
-async function importCookieSession(tab, baseUrl, token) {
-  if (!tab?.id || !tab?.url || !shouldSyncCookies(tab.url)) return;
+async function importCookieSession(tab, baseUrl, token, pageHtml) {
+  if (!tab?.id || !tab?.url) return;
 
-  const cookies = await getCookies(tab.url);
+  let cookieUrl = null;
+  let profileName = null;
+  let targetDomains = [];
+  try {
+    const hostname = new URL(tab.url).hostname.toLowerCase();
+    if (shouldSyncCookies(tab.url)) {
+      cookieUrl = tab.url;
+      profileName = "note.com";
+      targetDomains = [hostname, "note.com"];
+    } else if (looksLikeNoteCustomDomain(tab.url, pageHtml)) {
+      cookieUrl = "https://note.com/";
+      profileName = hostname;
+      targetDomains = [hostname, "note.com"];
+    } else {
+      return;
+    }
+  } catch {
+    return;
+  }
+
+  const cookies = await getCookies(cookieUrl);
   if (!cookies.length) {
     notify("Oksskolten Clip", "Cookie sync skipped: no matching cookies found.");
     return;
@@ -127,7 +158,9 @@ async function importCookieSession(tab, baseUrl, token) {
     },
     body: JSON.stringify({
       url: tab.url,
-      profileName: "note.com",
+      cookieUrl,
+      profileName,
+      targetDomains,
       userAgent: typeof userAgent === "string" ? userAgent : undefined,
       cookies: cookies.map((cookie) => ({
         name: cookie.name,
@@ -188,13 +221,13 @@ async function clipUrl(tab, force = false) {
     return;
   }
 
+  const pageHtml = tab?.id ? await getTabHtml(tab.id) : null;
+
   try {
-    await importCookieSession(tab, baseUrl, token);
+    await importCookieSession(tab, baseUrl, token, pageHtml);
   } catch (e) {
     notify("Oksskolten Clip", e instanceof Error ? e.message : String(e));
   }
-
-  const pageHtml = tab?.id ? await getTabHtml(tab.id) : null;
 
   let res;
   let body = {};

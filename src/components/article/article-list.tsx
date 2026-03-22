@@ -29,7 +29,7 @@ import { apiPatch, apiPost } from '../../lib/fetcher'
 import { patchArticleCacheValue } from '../../lib/article-cache'
 import { applyArticleOverride, clearArticleOverride, getArticleOverride } from '../../lib/article-overrides'
 import { getArticleListInvalidationVersion } from '../../lib/article-sync'
-import { Bookmark, Check, CheckCheck, CheckSquare2, MessageSquare, RotateCcw, Square, ThumbsUp, Trash2 } from 'lucide-react'
+import { Bookmark, Check, CheckCheck, CheckSquare2, MessageSquare, RefreshCw, RotateCcw, Square, ThumbsUp, Trash2 } from 'lucide-react'
 import type { ArticleListItem, FeedWithCounts } from '../../../shared/types'
 import type { LayoutName } from '../../data/layouts'
 
@@ -82,6 +82,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const [noFloor, setNoFloor] = useState(false)
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(() => new Set())
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
+  const [bulkRefetching, setBulkRefetching] = useState(false)
   const [commentDialogArticle, setCommentDialogArticle] = useState<ArticleListItem | null>(null)
   const [commentSaving, setCommentSaving] = useState(false)
   const displayConfig: ArticleDisplayConfig = useMemo(() => ({
@@ -566,6 +567,24 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     }
   }, [globalMutate, mutate, mutateArticles, selectedArticleIds, syncArticleCaches])
 
+  const handleBulkRefetch = useCallback(async () => {
+    const ids = [...selectedArticleIds]
+    if (ids.length === 0 || bulkRefetching) return
+    setBulkRefetching(true)
+    setSelectedArticleIds(new Set())
+    try {
+      await apiPost('/api/articles/batch-refetch', { ids })
+      await globalMutate((key: unknown) => typeof key === 'string' && (
+        key.startsWith('/api/feeds') || key.includes('/api/articles')
+      ))
+      await mutate()
+    } catch {
+      void mutate()
+    } finally {
+      setBulkRefetching(false)
+    }
+  }, [bulkRefetching, globalMutate, mutate, selectedArticleIds])
+
   return (
     <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
       <div className="px-4 md:px-6 pt-3 flex flex-wrap items-center gap-2">
@@ -589,6 +608,10 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
             <ActionChip onClick={() => { void handleBulkSeen(false) }}>
               <RotateCcw className="w-3.5 h-3.5" />
               {t('article.markUnread')}
+            </ActionChip>
+            <ActionChip onClick={() => { void handleBulkRefetch() }} disabled={bulkRefetching}>
+              <RefreshCw className={`w-3.5 h-3.5${bulkRefetching ? ' animate-spin' : ''}`} />
+              {bulkRefetching ? t('articles.bulkRefetching') : t('articles.bulkRefetch')}
             </ActionChip>
             <ActionChip onClick={() => setBulkDeleteConfirmOpen(true)}>
               <Trash2 className="w-3.5 h-3.5" />

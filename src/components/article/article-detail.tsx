@@ -65,8 +65,8 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   )
   const { viewMode, setViewMode, translating, translatingText, fullTextTranslated, handleTranslate, translatingHtml, error: translateError } = useTranslate(translateInput, metrics)
   const {
-    isBookmarked, isLiked, isSeen, archivingImages, deleteConfirmOpen, setDeleteConfirmOpen,
-    toggleBookmark, toggleLike, toggleSeen, handleArchiveImages, handleDelete,
+    isBookmarked, isLiked, isSeen, archivingImages, refetching, deleteConfirmOpen, setDeleteConfirmOpen,
+    toggleBookmark, toggleLike, toggleSeen, handleArchiveImages, handleRefetch, handleDelete,
   } = useArticleActions(article, articleKey)
   const chat = useChatInline(article?.id ?? 0)
   const previousArticleStateRef = useRef<Pick<ArticleDetailData, 'id' | 'bookmarked_at' | 'liked_at' | 'comment' | 'comment_updated_at' | 'seen_at' | 'read_at'> | null>(null)
@@ -158,6 +158,14 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     if (!md) return `<p class="text-muted">${t('article.noContent')}</p>`
     return sanitizeHtml(renderMarkdown(md))
   }, [article, viewMode, isUserLang, fullTextTranslated, t])
+
+  const displayedCharCount = useMemo(() => {
+    if (!article) return 0
+    const source = viewMode === 'translated' && !isUserLang
+      ? (fullTextTranslated || '')
+      : (article.full_text || '')
+    return Array.from(source).length
+  }, [article, viewMode, isUserLang, fullTextTranslated])
 
   const { rewrittenHtml: displayContent } = useRewriteInternalLinks(
     content,
@@ -291,7 +299,11 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
       </h1>
 
       {/* Date */}
-      <p className="text-sm text-muted mb-3">{formatDetailDate(article.published_at, locale)}</p>
+      <p className="text-sm text-muted mb-3">
+        {formatDetailDate(article.published_at, locale)}
+        <span className="mx-2">•</span>
+        {t('article.characterCount', { count: new Intl.NumberFormat(locale).format(displayedCharCount) })}
+      </p>
 
       {/* Toolbar */}
       <ArticleToolbar
@@ -311,11 +323,13 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
         isSeen={isSeen}
         showCommentEditor={commentEditorOpen}
         archivingImages={archivingImages}
-        onToggleBookmark={toggleBookmark}
-        onToggleLike={toggleLike}
+        refetching={refetching}
+        onToggleBookmark={handleToggleBookmark}
+        onToggleLike={handleToggleLike}
         onToggleCommentEditor={() => setCommentEditorOpen(open => !open)}
         onToggleSeen={handleToggleSeen}
         onArchiveImages={handleArchiveImages}
+        onRefetch={handleRefetch}
         onDelete={() => setDeleteConfirmOpen(true)}
       />
 

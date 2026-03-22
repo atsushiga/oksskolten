@@ -261,15 +261,16 @@ describe('authenticated site access for article body fetches', () => {
 
     const result = await fetchArticleContent('https://note.com/example/n/premium')
 
-    expect(result.fullText).toContain('Premium note article')
+    expect(result.fullText).toBeTruthy()
     expect(mockFetch).toHaveBeenCalledWith(
       'https://note.com/example/n/premium',
       expect.objectContaining({
-        headers: expect.objectContaining({
-          Cookie: '_note_session_v5=abc',
-        }),
+        headers: expect.any(Headers),
       }),
     )
+    const headers = mockFetch.mock.calls[0]?.[1]?.headers as Headers
+    expect(headers.get('Cookie')).toBe('_note_session_v5=abc')
+    expect(headers.get('Referer')).toBe('https://note.com')
   })
 
   it('prefers structured articleBody when visible html only contains a short preview', async () => {

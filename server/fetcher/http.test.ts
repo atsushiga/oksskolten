@@ -77,7 +77,16 @@ describe('fetchHtml', () => {
   })
 
   it('passes configured Cookie header for matching authenticated domains', async () => {
-    vi.mocked(getSiteAccessHeaders).mockReturnValue({ Cookie: 'sessionid=abc123' })
+    vi.mocked(getSiteAccessHeaders).mockReturnValue({
+      'User-Agent': 'Mozilla/5.0 Chrome/145.0.0.0',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
+      Cookie: 'sessionid=abc123',
+      Pragma: 'no-cache',
+      Referer: 'https://note.com',
+      'Upgrade-Insecure-Requests': '1',
+    })
     mockSafeFetch.mockResolvedValue({
       ok: true,
       text: async () => '',
@@ -89,10 +98,11 @@ describe('fetchHtml', () => {
     expect(mockSafeFetch).toHaveBeenCalledWith(
       'https://note.com/example',
       expect.objectContaining({
-        headers: {
-          'User-Agent': USER_AGENT,
+        headers: expect.objectContaining({
+          'User-Agent': 'Mozilla/5.0 Chrome/145.0.0.0',
           Cookie: 'sessionid=abc123',
-        },
+          Referer: 'https://note.com',
+        }),
       }),
     )
   })
@@ -136,7 +146,7 @@ describe('fetchHtml', () => {
   })
 
   it('does not use FlareSolverr fallback for authenticated fetches', async () => {
-    vi.mocked(getSiteAccessHeaders).mockReturnValue({ Cookie: 'sessionid=abc123' })
+    vi.mocked(getSiteAccessHeaders).mockReturnValue({ Cookie: 'sessionid=abc123', Referer: 'https://note.com' })
     mockSafeFetch.mockResolvedValue({ ok: false, status: 403 })
 
     await expect(fetchHtml('https://note.com/example')).rejects.toThrow('HTTP 403')

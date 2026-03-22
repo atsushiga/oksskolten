@@ -11,11 +11,12 @@ import fs from 'node:fs'
 // Mocks
 // ---------------------------------------------------------------------------
 
-const { mockArchiveArticleImages, mockIsImageArchivingEnabled, mockDeleteArticleImages, mockFetchArticleContent } = vi.hoisted(() => ({
+const { mockArchiveArticleImages, mockIsImageArchivingEnabled, mockDeleteArticleImages, mockFetchArticleContent, mockFetchAndParseRss } = vi.hoisted(() => ({
   mockArchiveArticleImages: vi.fn(),
   mockIsImageArchivingEnabled: vi.fn(),
   mockDeleteArticleImages: vi.fn(),
   mockFetchArticleContent: vi.fn(),
+  mockFetchAndParseRss: vi.fn(),
 }))
 
 vi.mock('../fetcher.js', async () => {
@@ -33,6 +34,10 @@ vi.mock('../fetcher.js', async () => {
     fetchArticleContent: (...args: unknown[]) => mockFetchArticleContent(...args),
   }
 })
+
+vi.mock('../fetcher/rss.js', () => ({
+  fetchAndParseRss: (...args: unknown[]) => mockFetchAndParseRss(...args),
+}))
 
 vi.mock('../anthropic.js', () => ({
   anthropic: { messages: { stream: vi.fn(), create: vi.fn() } },
@@ -76,6 +81,15 @@ beforeEach(async () => {
     lang: 'en',
     lastError: null,
     title: 'Fetched Title',
+  })
+  mockFetchAndParseRss.mockResolvedValue({
+    items: [],
+    notModified: false,
+    etag: null,
+    lastModified: null,
+    contentHash: null,
+    httpCacheSeconds: null,
+    rssTtlSeconds: null,
   })
   mockIsImageArchivingEnabled.mockReturnValue(false)
   mockArchiveArticleImages.mockResolvedValue({ rewrittenText: '', downloaded: 0, errors: 0 })
@@ -218,6 +232,52 @@ describe('POST /api/articles/from-url', () => {
     expect(res.json().can_force).toBeUndefined()
   })
 
+  it('200: refreshes an existing clip article when html is provided', async () => {
+    const clipFeed = ensureClipFeed()
+    const articleId = seedArticle(clipFeed.id, {
+      url: 'https://blog.example.com/existing-refresh',
+      full_text: 'Old preview',
+      summary: 'Old summary',
+      full_text_translated: 'Old translation',
+      translated_lang: 'ja',
+    })
+
+    mockFetchArticleContent.mockResolvedValue({
+      fullText: 'Refreshed full body from browser DOM',
+      ogImage: 'https://example.com/new.jpg',
+      excerpt: 'Fresh excerpt',
+      lang: 'en',
+      lastError: null,
+      title: 'Fetched Title',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/from-url',
+      headers: json,
+      payload: {
+        url: 'https://blog.example.com/existing-refresh',
+        html: '<html><body><article>Rendered full content</article></body></html>',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      refetched: true,
+      article: {
+        id: articleId,
+        full_text: 'Refreshed full body from browser DOM',
+        summary: null,
+        full_text_translated: null,
+        translated_lang: null,
+      },
+    })
+    expect(mockFetchArticleContent).toHaveBeenCalledWith(
+      'https://blog.example.com/existing-refresh',
+      { providedHtml: '<html><body><article>Rendered full content</article></body></html>' },
+    )
+  })
+
   it('409: returns can_force when article exists in RSS feed', async () => {
     ensureClipFeed()
     const rssFeed = seedFeed()
@@ -255,6 +315,57 @@ describe('POST /api/articles/from-url', () => {
     expect(moved!.feed_type).toBe('clip')
   })
 
+  it('200: force-moves RSS article to clip feed and refreshes content when html is provided', async () => {
+    const clipFeed = ensureClipFeed()
+    const rssFeed = seedFeed()
+    const artId = seedArticle(rssFeed.id, {
+      url: 'https://blog.example.com/to-move-refresh',
+      full_text: 'Old preview',
+      summary: 'Old summary',
+      full_text_translated: 'Old translation',
+      translated_lang: 'ja',
+    })
+
+    mockFetchArticleContent.mockResolvedValue({
+      fullText: 'Rendered full body from browser DOM',
+      ogImage: 'https://example.com/refreshed.jpg',
+      excerpt: 'Fresh excerpt',
+      lang: 'en',
+      lastError: null,
+      title: 'Fetched Title',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/from-url',
+      headers: json,
+      payload: {
+        url: 'https://blog.example.com/to-move-refresh',
+        force: true,
+        html: '<html><body><article>Rendered full body</article></body></html>',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      moved: true,
+      refetched: true,
+      article: {
+        id: artId,
+        feed_id: clipFeed.id,
+        feed_type: 'clip',
+        full_text: 'Rendered full body from browser DOM',
+        summary: null,
+        full_text_translated: null,
+        translated_lang: null,
+      },
+    })
+    expect(mockFetchArticleContent).toHaveBeenCalledWith(
+      'https://blog.example.com/to-move-refresh',
+      { providedHtml: '<html><body><article>Rendered full body</article></body></html>' },
+    )
+  })
+
   it('500: force-move fails when clip feed not found', async () => {
     // Create RSS feed and article but no clip feed
     const rssFeed = seedFeed()
@@ -282,6 +393,154 @@ describe('POST /api/articles/from-url', () => {
 
     expect(res.statusCode).toBe(500)
     expect(res.json().error).toMatch(/clip feed/i)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// POST /api/articles/:id/refetch
+// ---------------------------------------------------------------------------
+
+describe('POST /api/articles/:id/refetch', () => {
+  it('200: refetches an existing article and clears derived content', async () => {
+    const feed = seedFeed()
+    const articleId = seedArticle(feed.id, {
+      url: 'https://note.com/example/n/premium',
+      lang: 'ja',
+      full_text: 'Old body',
+      full_text_translated: 'Old translation',
+      translated_lang: 'en',
+      summary: 'Old summary',
+      excerpt: 'Old excerpt',
+      og_image: 'https://example.com/old.jpg',
+      last_error: 'old error',
+    })
+
+    mockFetchArticleContent.mockResolvedValue({
+      fullText: 'Refetched premium body',
+      ogImage: 'https://example.com/new.jpg',
+      excerpt: 'New excerpt',
+      lang: 'ja',
+      lastError: null,
+      title: 'Ignored title',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/articles/${articleId}/refetch`,
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(mockFetchArticleContent).toHaveBeenCalledWith('https://note.com/example/n/premium', {
+      listingExcerpt: undefined,
+    })
+    expect(res.json()).toMatchObject({
+      refetched: true,
+      article: {
+        id: articleId,
+        full_text: 'Refetched premium body',
+        full_text_translated: null,
+        translated_lang: null,
+        summary: null,
+        og_image: 'https://example.com/new.jpg',
+      },
+    })
+
+    const updated = getArticleById(articleId)
+    expect(updated?.full_text).toBe('Refetched premium body')
+    expect(updated?.full_text_translated).toBeNull()
+    expect(updated?.translated_lang).toBeNull()
+    expect(updated?.summary).toBeNull()
+    expect(updated?.og_image).toBe('https://example.com/new.jpg')
+    expect(updated?.title).toBe('Test Article')
+  })
+
+  it('200: refetch uses RSS item excerpt as fallback for RSS articles', async () => {
+    const feed = seedFeed({ rss_url: 'https://note.com/example/rss' })
+    const articleId = seedArticle(feed.id, {
+      url: 'https://note.com/example/n/premium-rss',
+      full_text: 'Old preview',
+      excerpt: 'Old short excerpt',
+      summary: 'Old summary',
+    })
+
+    mockFetchAndParseRss.mockResolvedValue({
+      items: [
+        {
+          title: 'Premium note article',
+          url: 'https://note.com/example/n/premium-rss',
+          published_at: '2025-01-01T00:00:00Z',
+          excerpt: 'Full body from RSS content:encoded',
+        },
+      ],
+      notModified: false,
+      etag: null,
+      lastModified: null,
+      contentHash: null,
+      httpCacheSeconds: null,
+      rssTtlSeconds: null,
+    })
+    mockFetchArticleContent.mockResolvedValue({
+      fullText: 'Full body from RSS content:encoded',
+      ogImage: null,
+      excerpt: 'Full body from RSS content:encoded',
+      lang: 'ja',
+      lastError: null,
+      title: null,
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/articles/${articleId}/refetch`,
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(mockFetchAndParseRss).toHaveBeenCalledWith(expect.objectContaining({ id: feed.id }), { skipCache: true })
+    expect(mockFetchArticleContent).toHaveBeenCalledWith('https://note.com/example/n/premium-rss', {
+      listingExcerpt: 'Full body from RSS content:encoded',
+    })
+    expect(res.json()).toMatchObject({
+      refetched: true,
+      article: {
+        id: articleId,
+        full_text: 'Full body from RSS content:encoded',
+        summary: null,
+      },
+    })
+  })
+
+  it('200: clears archived image state when refetching', async () => {
+    const feed = seedFeed()
+    const articleId = seedArticle(feed.id, {
+      full_text: '![alt](/api/articles/images/test.png)',
+    })
+    markImagesArchived(articleId)
+
+    mockFetchArticleContent.mockResolvedValue({
+      fullText: 'Fresh body',
+      ogImage: null,
+      excerpt: null,
+      lang: 'en',
+      lastError: null,
+      title: null,
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/articles/${articleId}/refetch`,
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(getArticleById(articleId)?.images_archived_at).toBeNull()
+  })
+
+  it('404: returns not found for unknown article', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/99999/refetch',
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(res.json().error).toMatch(/not found/i)
   })
 })
 
@@ -337,6 +596,62 @@ describe('DELETE /api/articles/:id', () => {
     })
 
     expect(res.statusCode).toBe(404)
+  })
+})
+
+describe('POST /api/articles/batch-refetch', () => {
+  it('200: refetches multiple articles and reports per-item status', async () => {
+    const feed = seedFeed()
+    const firstId = seedArticle(feed.id, {
+      url: 'https://note.com/example/n/1',
+      full_text: 'Old body 1',
+      summary: 'Old summary 1',
+    })
+    const secondId = seedArticle(feed.id, {
+      url: 'https://note.com/example/n/2',
+      full_text: 'Old body 2',
+      summary: 'Old summary 2',
+    })
+
+    mockFetchArticleContent
+      .mockResolvedValueOnce({
+        fullText: 'Refetched body 1',
+        ogImage: null,
+        excerpt: 'Excerpt 1',
+        lang: 'ja',
+        lastError: null,
+        title: null,
+      })
+      .mockResolvedValueOnce({
+        fullText: 'Refetched body 2',
+        ogImage: null,
+        excerpt: 'Excerpt 2',
+        lang: 'ja',
+        lastError: null,
+        title: null,
+      })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/batch-refetch',
+      headers: json,
+      payload: { ids: [firstId, secondId, 99999] },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({
+      success: 2,
+      failed: 1,
+      results: [
+        { id: firstId, ok: true },
+        { id: secondId, ok: true },
+        { id: 99999, ok: false, error: 'Article not found' },
+      ],
+    })
+    expect(getArticleById(firstId)?.full_text).toBe('Refetched body 1')
+    expect(getArticleById(secondId)?.full_text).toBe('Refetched body 2')
+    expect(getArticleById(firstId)?.summary).toBeNull()
+    expect(getArticleById(secondId)?.summary).toBeNull()
   })
 })
 

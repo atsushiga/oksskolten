@@ -419,6 +419,21 @@ export const demoStore = {
     return { success: true }
   },
 
+  batchRefetch(ids: number[]) {
+    const idSet = new Set(ids)
+    articles.filter(a => idSet.has(a.id)).forEach(a => {
+      a.summary = null
+      a.full_text_translated = null
+      a.translated_lang = null
+      a.excerpt = a.full_text?.slice(0, 200) ?? a.excerpt
+    })
+    return {
+      success: ids.length,
+      failed: 0,
+      results: ids.map(id => ({ id, ok: true })),
+    }
+  },
+
   toggleBookmark(id: number, bookmarked: boolean) {
     const article = articles.find(a => a.id === id)
     if (!article) return null

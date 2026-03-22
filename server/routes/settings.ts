@@ -55,7 +55,9 @@ const SiteAccessImportedCookieBody = z.object({
 })
 const SiteAccessImportSessionBody = z.object({
   url: HttpsUrl,
+  cookieUrl: HttpsUrl.optional(),
   profileName: z.string().optional(),
+  targetDomains: z.array(z.string()).optional(),
   userAgent: z.string().optional(),
   cookies: z.array(SiteAccessImportedCookieBody).min(1, 'at least one cookie is required'),
 })
@@ -555,7 +557,9 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
     try {
       const profile = importSiteAccessCookieSession({
         url: body.url,
+        cookieUrl: body.cookieUrl,
         profileName: body.profileName,
+        targetDomains: body.targetDomains,
         userAgent: body.userAgent,
         cookies: body.cookies,
       })

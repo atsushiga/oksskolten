@@ -304,6 +304,29 @@ describe('POST /api/articles/:id/translate?stream=1', () => {
     expect(errorEvent).toBeDefined()
     expect(errorEvent.error).toBe('TRANSLATION_FAILED')
   })
+
+  it('passes through provider API errors for translate streaming', async () => {
+    const feed = seedFeed()
+    const artId = seedArticle(feed.id, { full_text: 'Contenu', lang: 'fr' })
+
+    mockStreamTranslate.mockRejectedValue(new Error('DeepL API error: 413 Request body too large'))
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/articles/${artId}/translate?stream=1`,
+      headers: json,
+      payload: {},
+    })
+
+    const events = res.body
+      .split('\n')
+      .filter((l: string) => l.startsWith('data: '))
+      .map((l: string) => JSON.parse(l.slice(6)))
+
+    const errorEvent = events.find((e: any) => e.type === 'error')
+    expect(errorEvent).toBeDefined()
+    expect(errorEvent.error).toBe('DeepL API error: 413 Request body too large')
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -164,6 +164,26 @@ describe('ArticleDetail bookmark', () => {
     expect(bookmarkBtn.querySelector('svg')?.getAttribute('fill')).toBe('currentColor')
     expect(mockApiPatch).toHaveBeenCalledWith('/api/articles/1/bookmark', { bookmarked: true })
   })
+
+  it('shows the current article character count next to the date', () => {
+    render(
+      <MemoryRouter>
+        <LocaleContext.Provider value={{ locale: 'ja', setLocale: vi.fn() }}>
+          <TooltipProvider>
+            <SWRConfig value={{ provider: () => new Map(), fallback: { [articleKey]: article } }}>
+              <Routes>
+                <Route element={<OutletWrapper />}>
+                  <Route path="*" element={<ArticleDetail articleUrl={articleUrl} />} />
+                </Route>
+              </Routes>
+            </SWRConfig>
+          </TooltipProvider>
+        </LocaleContext.Provider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText((_, element) => element?.textContent === '2026年3月4日•4文字')).toBeTruthy()
+  })
 })
 
 describe('ArticleDetail like', () => {
@@ -369,5 +389,60 @@ describe('ArticleDetail stale translation filtering', () => {
     expect(mockUseTranslate).toHaveBeenCalled()
     const firstArg = mockUseTranslate.mock.calls[0]![0]
     expect(firstArg).toEqual({ id: 1, full_text_translated: null })
+  })
+})
+
+describe('ArticleDetail refetch', () => {
+  const articleUrl = 'https://example.com/posts/1'
+  const articleKey = `/api/articles/by-url?url=${encodeURIComponent(articleUrl)}`
+  const article = {
+    id: 1,
+    feed_id: 2,
+    feed_name: 'Example Feed',
+    title: 'Example Article',
+    url: articleUrl,
+    published_at: '2026-03-04T00:00:00.000Z',
+    lang: 'en',
+    summary: null,
+    full_text: 'Body',
+    full_text_translated: null,
+    translated_lang: null,
+    seen_at: '2026-03-04T00:00:00.000Z',
+    read_at: '2026-03-04T00:00:00.000Z',
+    bookmarked_at: null,
+    liked_at: null,
+  }
+
+  beforeEach(() => {
+    mockApiPatch.mockReset()
+    mockApiPost.mockReset()
+    mockApiPost.mockResolvedValue(undefined)
+    mockTrackRead.mockReset()
+    mockQueueSeenIds.mockClear()
+    mockUseTranslate.mockClear()
+  })
+
+  it('calls the refetch endpoint from the toolbar', async () => {
+    render(
+      <MemoryRouter>
+        <LocaleContext.Provider value={{ locale: 'ja', setLocale: vi.fn() }}>
+          <TooltipProvider>
+            <SWRConfig value={{ provider: () => new Map(), fallback: { [articleKey]: article } }}>
+              <Routes>
+                <Route element={<OutletWrapper />}>
+                  <Route path="*" element={<ArticleDetail articleUrl={articleUrl} />} />
+                </Route>
+              </Routes>
+            </SWRConfig>
+          </TooltipProvider>
+        </LocaleContext.Provider>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '再取得' }))
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/api/articles/1/refetch')
+    })
   })
 })
