@@ -446,3 +446,82 @@ describe('ArticleDetail refetch', () => {
     })
   })
 })
+
+describe('ArticleDetail mobile scroll-to-top', () => {
+  const articleUrl = 'https://example.com/posts/1'
+  const articleKey = `/api/articles/by-url?url=${encodeURIComponent(articleUrl)}`
+  const article = {
+    id: 1,
+    feed_id: 2,
+    feed_name: 'Example Feed',
+    title: 'Example Article',
+    url: articleUrl,
+    published_at: '2026-03-04T00:00:00.000Z',
+    lang: 'en',
+    summary: null,
+    full_text: 'Body',
+    full_text_translated: null,
+    translated_lang: null,
+    seen_at: '2026-03-04T00:00:00.000Z',
+    read_at: '2026-03-04T00:00:00.000Z',
+    bookmarked_at: null,
+    liked_at: null,
+  }
+
+  beforeEach(() => {
+    mockApiPatch.mockReset()
+    mockApiPost.mockReset()
+    mockApiPost.mockResolvedValue(undefined)
+    mockTrackRead.mockReset()
+    mockQueueSeenIds.mockClear()
+    mockUseTranslate.mockClear()
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
+  })
+
+  it('shows the scroll-to-top button when the overlay container is scrolled on touch devices', async () => {
+    const scrollContainer = document.createElement('div')
+
+    render(
+      <MemoryRouter>
+        <LocaleContext.Provider value={{ locale: 'ja', setLocale: vi.fn() }}>
+          <TooltipProvider>
+            <SWRConfig value={{ provider: () => new Map(), fallback: { [articleKey]: article } }}>
+              <Routes>
+                <Route element={<OutletWrapper />}>
+                  <Route path="*" element={<ArticleDetail articleUrl={articleUrl} getScrollContainer={() => scrollContainer} />} />
+                </Route>
+              </Routes>
+            </SWRConfig>
+          </TooltipProvider>
+        </LocaleContext.Provider>
+      </MemoryRouter>,
+    )
+
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 400,
+      writable: true,
+      configurable: true,
+    })
+
+    Object.defineProperty(scrollContainer, 'scrollTo', {
+      value: (options?: ScrollToOptions) => {
+        scrollContainer!.scrollTop = typeof options === 'object' ? (options.top ?? 0) : 0
+      },
+      writable: true,
+      configurable: true,
+    })
+
+    fireEvent.scroll(scrollContainer!)
+
+    expect(await screen.findByRole('button', { name: '先頭に戻る' })).toBeTruthy()
+  })
+})

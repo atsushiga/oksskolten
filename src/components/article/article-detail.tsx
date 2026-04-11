@@ -30,14 +30,16 @@ import { ArticleSummarySection } from './article-summary-section'
 import { ArticleTranslationBanner } from './article-translation-banner'
 import { ArticleContentBody } from './article-content-body'
 import { ArticleSimilarBanner } from './article-similar-banner'
+import { getArticleScrollTop, scrollArticleToTop } from './article-scroll'
 import { ChevronUp } from 'lucide-react'
 import type { ArticleDetail as ArticleDetailData } from '../../../shared/types'
 
 interface ArticleDetailProps {
   articleUrl: string
+  getScrollContainer?: () => HTMLElement | null
 }
 
-export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
+export function ArticleDetail({ articleUrl, getScrollContainer }: ArticleDetailProps) {
   const { settings: { internalLinks, chatPosition, translateTargetLang } } = useAppLayout()
   const navigate = useNavigate()
   const { t, tError, isKeyNotSetError, locale } = useI18n()
@@ -54,6 +56,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   const [showScrollToTop, setShowScrollToTop] = useState(false)
 
   const articleRef = useRef<HTMLElement>(null)
+  const scrollContainerRef = useRef<HTMLElement | null>(null)
 
   const metrics = useMetrics()
   const { summary, summarizing, streamingText, handleSummarize, summaryHtml, streamingHtml, error: summarizeError } = useSummarize(article, metrics)
@@ -173,6 +176,10 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     internalLinks === 'on',
   )
 
+  const resolveScrollContainer = useCallback(() =>
+    getScrollContainer?.() ?? articleRef.current?.closest<HTMLElement>('[data-article-scroll-container]') ?? null,
+  [getScrollContainer])
+
   // Event delegation: single listener on <article> handles all image clicks & errors
   const hasArticle = !!article
   useEffect(() => {
@@ -216,12 +223,25 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   }, [hasArticle, navigate])
 
   useEffect(() => {
-    if (!isTouchDevice) return
-    const handleScroll = () => setShowScrollToTop(window.scrollY > 320)
+    if (!isTouchDevice || !hasArticle) {
+      scrollContainerRef.current = null
+      setShowScrollToTop(false)
+      return
+    }
+
+    const scrollContainer = resolveScrollContainer()
+    scrollContainerRef.current = scrollContainer
+
+    const handleScroll = () => {
+      setShowScrollToTop(getArticleScrollTop(scrollContainer) > 320)
+    }
+
     handleScroll()
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [isTouchDevice])
+
+    const scrollTarget = scrollContainer ?? window
+    scrollTarget.addEventListener('scroll', handleScroll, { passive: true })
+    return () => scrollTarget.removeEventListener('scroll', handleScroll)
+  }, [hasArticle, isTouchDevice, resolveScrollContainer])
 
   if (error) {
     return (
@@ -248,7 +268,9 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   }
 
   const hasTranslation = !!fullTextTranslated
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+  const scrollToTop = () => {
+    scrollArticleToTop(scrollContainerRef.current ?? resolveScrollContainer())
+  }
   const handleToggleBookmark = () => {
     if (article) {
       syncArticleCaches(article.id, { bookmarked_at: isBookmarked ? null : new Date().toISOString() })
