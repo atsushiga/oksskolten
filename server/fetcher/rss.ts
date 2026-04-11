@@ -130,6 +130,14 @@ export async function fetchAndParseRss(feed: Feed, opts?: { skipCache?: boolean 
 
   const isCssBridge = isCssSelectorBridgeUrl(rssUrl)
 
+  // RSS_BRIDGE_URL not configured: CssSelectorBridge URLs use an "internal://"
+  // placeholder and can never be fetched directly. Go straight to the
+  // FlareSolverr + JSDOM path.
+  if (isCssBridge && rssUrl.startsWith('internal://')) {
+    const items = cleanItems(assignCssBridgePseudoDates(await fetchCssSelectorViaFlareSolverr(rssUrl), rssUrl))
+    return { items, notModified: false, etag: null, lastModified: null, contentHash: null, httpCacheSeconds: null, rssTtlSeconds: null }
+  }
+
   let xml: string
   let responseEtag: string | null = null
   let responseLastModified: string | null = null

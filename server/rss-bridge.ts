@@ -12,6 +12,13 @@ const log = logger.child('rss-bridge')
 
 const RSS_BRIDGE_URL = process.env.RSS_BRIDGE_URL
 
+/**
+ * Placeholder base used when RSS_BRIDGE_URL is not configured. The resulting
+ * CssSelectorBridge URL is never fetched directly — rss.ts detects it via
+ * `bridge=CssSelectorBridge` and falls back to fetchCssSelectorViaFlareSolverr.
+ */
+const CSS_BRIDGE_PLACEHOLDER_BASE = 'internal://css-bridge'
+
 export async function queryRssBridge(url: string): Promise<string | null> {
   if (!RSS_BRIDGE_URL) return null
 
@@ -67,7 +74,8 @@ export function buildCssSelectorBridgeUrl(
   })
   if (opts?.titleSelector) params.set('title_selector', opts.titleSelector)
   if (opts?.contentSelector) params.set('content_selector', opts.contentSelector)
-  return `${RSS_BRIDGE_URL}/?${params.toString()}`
+  const base = RSS_BRIDGE_URL ?? CSS_BRIDGE_PLACEHOLDER_BASE
+  return `${base}/?${params.toString()}`
 }
 
 const CSS_SELECTOR_SYSTEM = `You extract CSS selectors from HTML to build an RSS feed. Respond with ONLY a JSON object. No markdown, no explanation.`
@@ -133,8 +141,6 @@ function extractAnchorSnippets(html: string): string[] {
 }
 
 export async function inferCssSelectorBridge(url: string): Promise<string | null> {
-  if (!RSS_BRIDGE_URL) return null
-
   const available = getAvailableProvider()
   if (!available) return null
 
@@ -193,12 +199,16 @@ export async function inferCssSelectorBridge(url: string): Promise<string | null
 
     // Build CssSelectorBridge URL (includes custom params for our own code)
     const bridgeUrl = buildCssSelectorBridgeUrl(url, selector, { titleSelector, contentSelector })
-    // Validate with RSS-Bridge using only the params it understands
-    const { stripCustomBridgeParams } = await import('./fetcher/css-bridge.js')
-    const validation = await validateBridgeFeed(stripCustomBridgeParams(bridgeUrl), url)
-    if (validation === 'invalid') {
-      log.info(`CssSelectorBridge validation failed for ${url} (selector="${selector}")`)
-      return null
+    // Validate with RSS-Bridge using only the params it understands.
+    // Skip when RSS_BRIDGE_URL is not configured — the feed will be fetched
+    // via FlareSolverr + JSDOM (see fetchCssSelectorViaFlareSolverr).
+    if (RSS_BRIDGE_URL) {
+      const { stripCustomBridgeParams } = await import('./fetcher/css-bridge.js')
+      const validation = await validateBridgeFeed(stripCustomBridgeParams(bridgeUrl), url)
+      if (validation === 'invalid') {
+        log.info(`CssSelectorBridge validation failed for ${url} (selector="${selector}")`)
+        return null
+      }
     }
 
     log.info(`CssSelectorBridge inferred for ${url}: url="${selector}" title="${titleSelector ?? 'none'}" content="${contentSelector ?? 'none'}"`)
