@@ -148,6 +148,18 @@ describe('useFeedDragDrop', () => {
     expect(apiPatch).toHaveBeenCalledWith('/api/feeds/1', { category_id: 5 })
   })
 
+  it('handleDrop falls back to text/plain payload', async () => {
+    const { result } = renderHook(() => useFeedDragDrop({ feeds, categories, mutateFeeds, mutateCategories }))
+    const dropEvent = makeDragEvent()
+    dropEvent.dataTransfer.setData('text/plain', 'feed:1')
+
+    await act(async () => {
+      await result.current.handleDrop(dropEvent, 5)
+    })
+
+    expect(apiPatch).toHaveBeenCalledWith('/api/feeds/1', { category_id: 5 })
+  })
+
   it('handleFeedReorderDrop reorders feeds within the same category', async () => {
     const { result } = renderHook(() => useFeedDragDrop({ feeds, categories, mutateFeeds, mutateCategories }))
     const event = makeDragEvent({ clientY: 18 })
@@ -186,6 +198,18 @@ describe('useFeedDragDrop', () => {
     })
 
     expect(event.stopPropagation).toHaveBeenCalled()
+    expect(apiPatch).toHaveBeenCalledWith('/api/categories/reorder', { category_ids: [4, 3] })
+  })
+
+  it('handleCategoryReorderDrop falls back to text/plain payload', async () => {
+    const { result } = renderHook(() => useFeedDragDrop({ feeds, categories, mutateFeeds, mutateCategories }))
+    const event = makeDragEvent({ clientY: 18 })
+    event.dataTransfer.setData('text/plain', 'category:3')
+
+    await act(async () => {
+      await result.current.handleCategoryReorderDrop(event, categories[1])
+    })
+
     expect(apiPatch).toHaveBeenCalledWith('/api/categories/reorder', { category_ids: [4, 3] })
   })
 

@@ -77,8 +77,18 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
   const { progress, startFeedFetch, subscribeFeedFetch } = useFetchProgressContext()
   const { data: feedsData, mutate: mutateFeeds } = useSWR<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; comment_count?: number; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData, mutate: mutateCategories } = useSWR<{ categories: Category[] }>('/api/categories', fetcher)
-  const feeds = useMemo(() => feedsData?.feeds ?? [], [feedsData])
-  const categories = useMemo(() => categoriesData?.categories ?? [], [categoriesData])
+  const feeds = useMemo(() => [...(feedsData?.feeds ?? [])].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'clip' ? 1 : -1
+    const aCategory = a.category_id ?? Number.MAX_SAFE_INTEGER
+    const bCategory = b.category_id ?? Number.MAX_SAFE_INTEGER
+    if (aCategory !== bCategory) return aCategory - bCategory
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+    return a.name.localeCompare(b.name)
+  }), [feedsData])
+  const categories = useMemo(() => [...(categoriesData?.categories ?? [])].sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+    return a.name.localeCompare(b.name)
+  }), [categoriesData])
 
   const [feedModalOpen, setFeedModalOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -278,6 +288,7 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
 
     const button = (
       <button
+        type="button"
         draggable={!isRenaming}
         onDragStart={e => handleDragStart(e, feed, multiSelectedIds)}
         onDragOver={e => handleFeedReorderDragOver(e, feed)}
@@ -430,6 +441,7 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
           onFetch={() => handleFetchCategory(category)}
         >
           <button
+            type="button"
             draggable={!isRenaming}
             onDragStart={e => handleCategoryDragStart(e, category)}
             onDragOver={e => handleCategoryReorderDragOver(e, category)}

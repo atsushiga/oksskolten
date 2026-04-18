@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { apiPatch, apiPost } from '../lib/fetcher'
 import type { FeedWithCounts, Category } from '../../shared/types'
 import type { KeyedMutator } from 'swr'
@@ -9,6 +9,10 @@ const SIDEBAR_KIND_MIME = 'application/x-sidebar-kind'
 
 type DropZoneTarget = number | 'uncategorized' | null
 type InsertPosition = 'before' | 'after'
+type ActiveDrag =
+  | { kind: 'feed'; feedIds: number[] }
+  | { kind: 'category'; categoryId: number }
+  | null
 
 type FeedsResponse = {
   feeds: FeedWithCounts[]
@@ -37,23 +41,47 @@ function reorderItems<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   return next
 }
 
-function getSingleDraggedFeedId(dataTransfer: DataTransfer): number | null {
+function getDragKind(dataTransfer: DataTransfer): 'feed' | 'category' | null {
+  const customKind = dataTransfer.getData(SIDEBAR_KIND_MIME)
+  if (customKind === 'feed' || customKind === 'category') return customKind
+
+  const plain = dataTransfer.getData('text/plain')
+  if (plain.startsWith('feed:')) return 'feed'
+  if (plain.startsWith('category:')) return 'category'
+  return null
+}
+
+function getDraggedFeedIds(dataTransfer: DataTransfer): number[] {
   const raw = dataTransfer.getData(FEED_IDS_MIME)
-  if (!raw) return null
-  try {
-    const feedIds = JSON.parse(raw)
-    return Array.isArray(feedIds) && feedIds.length === 1 && typeof feedIds[0] === 'number'
-      ? feedIds[0]
-      : null
-  } catch {
-    return null
+  if (raw) {
+    try {
+      const feedIds = JSON.parse(raw)
+      if (Array.isArray(feedIds) && feedIds.every(id => typeof id === 'number')) {
+        return feedIds
+      }
+    } catch {
+      // fall through to text/plain
+    }
   }
+
+  const plain = dataTransfer.getData('text/plain')
+  if (!plain.startsWith('feed:')) return []
+  return plain
+    .slice(5)
+    .split(',')
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value))
+}
+
+function getSingleDraggedFeedId(dataTransfer: DataTransfer): number | null {
+  const feedIds = getDraggedFeedIds(dataTransfer)
+  return feedIds.length === 1 ? feedIds[0] : null
 }
 
 function getDraggedCategoryId(dataTransfer: DataTransfer): number | null {
   const raw = dataTransfer.getData(CATEGORY_ID_MIME)
-  if (!raw) return null
-  const categoryId = Number(raw)
+  const plain = dataTransfer.getData('text/plain')
+  const categoryId = Number(raw || (plain.startsWith('category:') ? plain.slice(9) : ''))
   return Number.isFinite(categoryId) ? categoryId : null
 }
 
@@ -74,6 +102,7 @@ export function useFeedDragDrop({
   const [categoryInsertIndicator, setCategoryInsertIndicator] = useState<{ categoryId: number; position: InsertPosition } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [draggingCount, setDraggingCount] = useState(0)
+  const activeDragRef = useRef<ActiveDrag>(null)
 
   function resetDragState() {
     setDragOverTarget(null)
@@ -81,6 +110,7 @@ export function useFeedDragDrop({
     setCategoryInsertIndicator(null)
     setIsDragging(false)
     setDraggingCount(0)
+    activeDragRef.current = null
   }
 
   function handleDragStart(e: React.DragEvent, feed: FeedWithCounts, selectedFeedIds?: Set<number>) {
@@ -90,7 +120,9 @@ export function useFeedDragDrop({
 
     e.dataTransfer.setData(FEED_IDS_MIME, JSON.stringify(feedIds))
     e.dataTransfer.setData(SIDEBAR_KIND_MIME, 'feed')
+    e.dataTransfer.setData('text/plain', `feed:${feedIds.join(',')}`)
     e.dataTransfer.effectAllowed = 'move'
+    activeDragRef.current = { kind: 'feed', feedIds }
     setIsDragging(true)
     setDraggingCount(feedIds.length)
 
@@ -107,13 +139,15 @@ export function useFeedDragDrop({
   function handleCategoryDragStart(e: React.DragEvent, category: Category) {
     e.dataTransfer.setData(CATEGORY_ID_MIME, String(category.id))
     e.dataTransfer.setData(SIDEBAR_KIND_MIME, 'category')
+    e.dataTransfer.setData('text/plain', `category:${category.id}`)
     e.dataTransfer.effectAllowed = 'move'
+    activeDragRef.current = { kind: 'category', categoryId: category.id }
     setIsDragging(true)
     setDraggingCount(1)
   }
 
   function handleDragOver(e: React.DragEvent, target: number | 'uncategorized') {
-    if (e.dataTransfer.getData(SIDEBAR_KIND_MIME) !== 'feed') return
+    if (activeDragRef.current?.kind !== 'feed' && getDragKind(e.dataTransfer) !== 'feed') return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOverTarget(target)
@@ -128,8 +162,10 @@ export function useFeedDragDrop({
   }
 
   function handleFeedReorderDragOver(e: React.DragEvent, targetFeed: FeedWithCounts) {
-    if (e.dataTransfer.getData(SIDEBAR_KIND_MIME) !== 'feed') return
-    const draggedFeedId = getSingleDraggedFeedId(e.dataTransfer)
+    if (activeDragRef.current?.kind !== 'feed' && getDragKind(e.dataTransfer) !== 'feed') return
+    const draggedFeedId = activeDragRef.current?.kind === 'feed' && activeDragRef.current.feedIds.length === 1
+      ? activeDragRef.current.feedIds[0]
+      : getSingleDraggedFeedId(e.dataTransfer)
     if (!draggedFeedId || draggedFeedId === targetFeed.id) return
     const draggedFeed = feeds.find(feed => feed.id === draggedFeedId)
     if (!draggedFeed || draggedFeed.category_id !== targetFeed.category_id) return
@@ -149,8 +185,10 @@ export function useFeedDragDrop({
   }
 
   async function handleFeedReorderDrop(e: React.DragEvent, targetFeed: FeedWithCounts) {
-    if (e.dataTransfer.getData(SIDEBAR_KIND_MIME) !== 'feed') return
-    const draggedFeedId = getSingleDraggedFeedId(e.dataTransfer)
+    if (activeDragRef.current?.kind !== 'feed' && getDragKind(e.dataTransfer) !== 'feed') return
+    const draggedFeedId = activeDragRef.current?.kind === 'feed' && activeDragRef.current.feedIds.length === 1
+      ? activeDragRef.current.feedIds[0]
+      : getSingleDraggedFeedId(e.dataTransfer)
     if (!draggedFeedId || draggedFeedId === targetFeed.id) return
     const draggedFeed = feeds.find(feed => feed.id === draggedFeedId)
     if (!draggedFeed || draggedFeed.category_id !== targetFeed.category_id) return
@@ -202,8 +240,10 @@ export function useFeedDragDrop({
   }
 
   function handleCategoryReorderDragOver(e: React.DragEvent, targetCategory: Category) {
-    if (e.dataTransfer.getData(SIDEBAR_KIND_MIME) !== 'category') return
-    const draggedCategoryId = getDraggedCategoryId(e.dataTransfer)
+    if (activeDragRef.current?.kind !== 'category' && getDragKind(e.dataTransfer) !== 'category') return
+    const draggedCategoryId = activeDragRef.current?.kind === 'category'
+      ? activeDragRef.current.categoryId
+      : getDraggedCategoryId(e.dataTransfer)
     if (!draggedCategoryId || draggedCategoryId === targetCategory.id) return
 
     e.preventDefault()
@@ -221,8 +261,10 @@ export function useFeedDragDrop({
   }
 
   async function handleCategoryReorderDrop(e: React.DragEvent, targetCategory: Category) {
-    if (e.dataTransfer.getData(SIDEBAR_KIND_MIME) !== 'category') return
-    const draggedCategoryId = getDraggedCategoryId(e.dataTransfer)
+    if (activeDragRef.current?.kind !== 'category' && getDragKind(e.dataTransfer) !== 'category') return
+    const draggedCategoryId = activeDragRef.current?.kind === 'category'
+      ? activeDragRef.current.categoryId
+      : getDraggedCategoryId(e.dataTransfer)
     if (!draggedCategoryId || draggedCategoryId === targetCategory.id) return
 
     e.preventDefault()
@@ -270,7 +312,7 @@ export function useFeedDragDrop({
   }
 
   async function handleDrop(e: React.DragEvent, categoryId: number | null) {
-    if (e.dataTransfer.getData(SIDEBAR_KIND_MIME) !== 'feed') return
+    if (activeDragRef.current?.kind !== 'feed' && getDragKind(e.dataTransfer) !== 'feed') return
     e.preventDefault()
     setDragOverTarget(null)
     setFeedInsertIndicator(null)
@@ -278,19 +320,8 @@ export function useFeedDragDrop({
     setIsDragging(false)
     setDraggingCount(0)
 
-    let feedIds: number[]
-    const raw = e.dataTransfer.getData(FEED_IDS_MIME)
-    if (raw) {
-      try {
-        feedIds = JSON.parse(raw)
-      } catch {
-        return
-      }
-    } else {
-      const plainId = Number(e.dataTransfer.getData('text/plain'))
-      if (!plainId) return
-      feedIds = [plainId]
-    }
+    const feedIds = activeDragRef.current?.kind === 'feed' ? activeDragRef.current.feedIds : getDraggedFeedIds(e.dataTransfer)
+    if (feedIds.length === 0) return
 
     const feedsToMove = feedIds.filter(id => {
       const feed = feeds.find(candidate => candidate.id === id)
