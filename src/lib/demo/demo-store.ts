@@ -29,6 +29,7 @@ const NULLABLE_DATE_KEYS = ['published_at', 'seen_at', 'read_at', 'bookmarked_at
 const REQUIRED_DATE_KEYS = ['fetched_at', 'created_at'] as const satisfies readonly (keyof SeedArticle)[]
 
 function resolveSeedDates() {
+  const feedSortOrderByCategory = new Map<number | null, number>()
   for (const a of articles) {
     for (const key of NULLABLE_DATE_KEYS) {
       a[key] = resolveRelativeDate(a[key])
@@ -39,6 +40,11 @@ function resolveSeedDates() {
   }
   for (const f of feeds) {
     f.created_at = resolveRelativeDate(f.created_at) ?? f.created_at
+    if (f.sort_order == null) {
+      const nextSortOrder = feedSortOrderByCategory.get(f.category_id) ?? 0
+      f.sort_order = nextSortOrder
+      feedSortOrderByCategory.set(f.category_id, nextSortOrder + 1)
+    }
   }
 }
 
@@ -72,6 +78,7 @@ interface SeedFeed {
   rss_url: string | null
   rss_bridge_url: string | null
   category_id: number | null
+  sort_order: number
   category_name: string | null
   lang: string
   type: 'rss' | 'clip'
@@ -140,11 +147,15 @@ function feedName(feedId: number): string {
 }
 
 function createFeed(overrides: Partial<SeedFeed> & Pick<SeedFeed, 'name' | 'url'>): SeedFeed {
+  const nextSortOrder = feeds
+    .filter(feed => feed.category_id === (overrides.category_id ?? null))
+    .reduce((max, feed) => Math.max(max, feed.sort_order), -1) + 1
   return {
     id: nextFeedId++,
     rss_url: overrides.url,
     rss_bridge_url: null,
     category_id: null,
+    sort_order: nextSortOrder,
     category_name: null,
     lang: getLocale(),
     type: 'rss',
@@ -240,7 +251,15 @@ export const demoStore = {
   // --- Read ---
   getFeeds() {
     return {
-      feeds: feeds.map(f => toFeedWithCounts(f)),
+      feeds: [...feeds]
+        .sort((a, b) => {
+          const aCategory = a.category_id ?? Number.MAX_SAFE_INTEGER
+          const bCategory = b.category_id ?? Number.MAX_SAFE_INTEGER
+          if (aCategory !== bCategory) return aCategory - bCategory
+          if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+          return a.name.localeCompare(b.name)
+        })
+        .map(f => toFeedWithCounts(f)),
       bookmark_count: articles.filter(a => a.bookmarked_at != null).length,
       like_count: articles.filter(a => a.liked_at != null).length,
       clip_feed_id: feeds.find(f => f.type === 'clip')?.id ?? null,

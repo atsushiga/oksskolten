@@ -150,6 +150,25 @@ describe('PATCH /api/feeds/:id', () => {
   })
 })
 
+describe('PATCH /api/feeds/reorder', () => {
+  it('reorders feeds within a category', async () => {
+    const first = seedFeed({ name: 'First', url: 'https://first.example.com' })
+    const second = seedFeed({ name: 'Second', url: 'https://second.example.com' })
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/feeds/reorder',
+      headers: json,
+      payload: { feed_ids: [second.id, first.id], category_id: null },
+    })
+
+    expect(res.statusCode).toBe(204)
+
+    const feedsRes = await app.inject({ method: 'GET', url: '/api/feeds' })
+    expect(feedsRes.json().feeds.map((feed: { id: number }) => feed.id)).toEqual([second.id, first.id])
+  })
+})
+
 describe('DELETE /api/feeds/:id', () => {
   it('deletes a feed', async () => {
     const feed = seedFeed()
@@ -816,6 +835,25 @@ describe('PATCH /api/categories/:id', () => {
       payload: { name: 'Ghost' },
     })
     expect(res.statusCode).toBe(404)
+  })
+})
+
+describe('PATCH /api/categories/reorder', () => {
+  it('reorders categories', async () => {
+    const first = createCategory('First')
+    const second = createCategory('Second')
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/categories/reorder',
+      headers: json,
+      payload: { category_ids: [second.id, first.id] },
+    })
+
+    expect(res.statusCode).toBe(204)
+
+    const categoriesRes = await app.inject({ method: 'GET', url: '/api/categories' })
+    expect(categoriesRes.json().categories.map((category: { id: number }) => category.id)).toEqual([second.id, first.id])
   })
 })
 

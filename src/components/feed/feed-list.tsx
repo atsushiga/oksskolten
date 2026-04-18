@@ -189,9 +189,12 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
   })
 
   const {
-    dragOverTarget, isDragging,
-    handleDragStart, handleDragOver, handleDragLeave, handleDrop, handleDragEnd,
-  } = useFeedDragDrop({ feeds, mutateFeeds, onDropComplete: clearSelection })
+    dragOverTarget, feedInsertIndicator, categoryInsertIndicator, isDragging,
+    handleDragStart, handleCategoryDragStart, handleDragOver, handleDragLeave,
+    handleFeedReorderDragOver, handleFeedReorderDragLeave, handleFeedReorderDrop,
+    handleCategoryReorderDragOver, handleCategoryReorderDragLeave, handleCategoryReorderDrop,
+    handleDrop, handleDragEnd,
+  } = useFeedDragDrop({ feeds, categories, mutateFeeds, mutateCategories, onDropComplete: clearSelection })
 
   const {
     bulkDeleteConfirm, setBulkDeleteConfirm,
@@ -277,6 +280,9 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
       <button
         draggable={!isRenaming}
         onDragStart={e => handleDragStart(e, feed, multiSelectedIds)}
+        onDragOver={e => handleFeedReorderDragOver(e, feed)}
+        onDragLeave={e => handleFeedReorderDragLeave(e, feed.id)}
+        onDrop={e => void handleFeedReorderDrop(e, feed)}
         onDragEnd={handleDragEnd}
         onClick={e => handleFeedClick(e, feed)}
         className={`w-full text-left ${indent ? 'pl-7' : 'pl-2'} pr-2 py-1.5 text-sm flex items-center justify-between outline-none transition-colors hover:bg-hover-sidebar ${
@@ -290,17 +296,29 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
               ? 'font-medium text-accent'
               : 'text-text'
         }`}
-        style={isMultiSelected(feed.id) ? (() => {
-          const { isFirst, isLast } = selectionGroupPos(feed.id)
+        style={(() => {
+          const isDropTarget = feedInsertIndicator?.feedId === feed.id
+          const baseStyle = isMultiSelected(feed.id) ? (() => {
+            const { isFirst, isLast } = selectionGroupPos(feed.id)
+            return {
+              backgroundColor: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+              borderLeft: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+              borderRight: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+              borderTop: isFirst ? '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'none',
+              borderBottom: isLast ? '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'none',
+              borderRadius: `${isFirst ? '8px' : '0'} ${isFirst ? '8px' : '0'} ${isLast ? '8px' : '0'} ${isLast ? '8px' : '0'}`,
+            }
+          })() : {}
+
+          if (!isDropTarget) return Object.keys(baseStyle).length > 0 ? baseStyle : undefined
+
           return {
-            backgroundColor: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-            borderLeft: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
-            borderRight: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
-            borderTop: isFirst ? '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'none',
-            borderBottom: isLast ? '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'none',
-            borderRadius: `${isFirst ? '8px' : '0'} ${isFirst ? '8px' : '0'} ${isLast ? '8px' : '0'} ${isLast ? '8px' : '0'}`,
+            ...baseStyle,
+            boxShadow: feedInsertIndicator.position === 'before'
+              ? 'inset 0 2px 0 var(--color-accent)'
+              : 'inset 0 -2px 0 var(--color-accent)',
           }
-        })() : undefined}
+        })()}
       >
         <div className="flex items-center gap-2 min-w-0">
           {(() => {
@@ -412,10 +430,23 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
           onFetch={() => handleFetchCategory(category)}
         >
           <button
+            draggable={!isRenaming}
+            onDragStart={e => handleCategoryDragStart(e, category)}
+            onDragOver={e => handleCategoryReorderDragOver(e, category)}
+            onDragLeave={e => handleCategoryReorderDragLeave(e, category.id)}
+            onDrop={e => void handleCategoryReorderDrop(e, category)}
+            onDragEnd={handleDragEnd}
             onClick={() => selectCategory(category.id)}
             className={`w-full text-left px-2 py-1.5 rounded-lg text-sm flex items-center justify-between outline-none transition-colors hover:bg-hover-sidebar ${
               isSelected ? 'font-medium text-accent' : 'text-text'
             }`}
+            style={categoryInsertIndicator?.categoryId === category.id
+              ? {
+                boxShadow: categoryInsertIndicator.position === 'before'
+                  ? 'inset 0 2px 0 var(--color-accent)'
+                  : 'inset 0 -2px 0 var(--color-accent)',
+              }
+              : undefined}
           >
             <div className="flex items-center gap-1 min-w-0">
               <span

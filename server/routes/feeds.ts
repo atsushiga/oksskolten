@@ -13,6 +13,7 @@ import {
   updateFeed,
   deleteFeed,
   bulkMoveFeedsToCategory,
+  reorderFeeds,
   markAllSeenByFeed,
   getBookmarkCount,
   getLikeCount,
@@ -49,6 +50,7 @@ const UpdateFeedBody = z.object({
   rss_bridge_url: z.string().nullable().optional(),
   disabled: z.number().optional(),
   category_id: z.number().nullable().optional(),
+  sort_order: z.number().int().nonnegative().optional(),
 })
 
 export async function feedRoutes(api: FastifyInstance): Promise<void> {
@@ -189,6 +191,11 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     category_id: z.number().nullable(),
   })
 
+  const ReorderFeedsBody = z.object({
+    feed_ids: z.array(z.number()).min(1, 'feed_ids must not be empty'),
+    category_id: z.number().nullable(),
+  })
+
   api.post(
     '/api/feeds/bulk-move',
     { preHandler: [requireJson] },
@@ -196,6 +203,17 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
       const body = parseOrBadRequest(BulkMoveBody, request.body, reply)
       if (!body) return
       bulkMoveFeedsToCategory(body.feed_ids, body.category_id)
+      reply.status(204).send()
+    },
+  )
+
+  api.patch(
+    '/api/feeds/reorder',
+    { preHandler: [requireJson] },
+    async (request, reply) => {
+      const body = parseOrBadRequest(ReorderFeedsBody, request.body, reply)
+      if (!body) return
+      reorderFeeds(body.feed_ids, body.category_id)
       reply.status(204).send()
     },
   )

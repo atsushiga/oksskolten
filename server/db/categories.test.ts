@@ -6,6 +6,7 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
   markAllSeenByCategory,
   createFeed,
   insertArticle,
@@ -142,6 +143,21 @@ describe('deleteCategory', () => {
 
   it('returns false for non-existent id', () => {
     expect(deleteCategory(9999)).toBe(false)
+  })
+})
+
+describe('reorderCategories', () => {
+  it('updates category sort_order in the provided order', () => {
+    const first = createCategory('First')
+    const second = createCategory('Second')
+
+    reorderCategories([second.id, first.id])
+
+    const categories = getCategories()
+    expect(categories[0].id).toBe(second.id)
+    expect(categories[1].id).toBe(first.id)
+    expect(getCategoryById(second.id)!.sort_order).toBe(0)
+    expect(getCategoryById(first.id)!.sort_order).toBe(1)
   })
 })
 

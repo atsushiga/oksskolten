@@ -60,6 +60,7 @@ function makeFeed(overrides: Partial<FeedWithCounts> = {}): FeedWithCounts {
     rss_url: null,
     rss_bridge_url: null,
     category_id: null,
+    sort_order: 0,
     last_error: null,
     error_count: 0,
     disabled: 0,

@@ -3,6 +3,28 @@ import type { Feed, FeedWithCounts } from './types.js'
 import type { MeiliArticleDoc } from '../search/client.js'
 import { deleteArticlesByFeedFromSearch, syncArticlesByFeedToSearch } from '../search/sync.js'
 
+function getNextFeedSortOrder(categoryId: number | null, excludeFeedIds: number[] = []): number {
+  const exclusionSql = excludeFeedIds.length > 0
+    ? `AND id NOT IN (${excludeFeedIds.map(() => '?').join(',')})`
+    : ''
+  const sql = categoryId == null
+    ? `
+      SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+      FROM feeds
+      WHERE category_id IS NULL
+        ${exclusionSql}
+    `
+    : `
+      SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+      FROM feeds
+      WHERE category_id = ?
+        ${exclusionSql}
+    `
+  const args = categoryId == null ? excludeFeedIds : [categoryId, ...excludeFeedIds]
+  const row = getDb().prepare(sql).get(...args) as { next: number }
+  return row.next
+}
+
 export function getFeeds(): FeedWithCounts[] {
   return getDb().prepare(`
     SELECT f.*, c.name AS category_name,
@@ -20,7 +42,12 @@ export function getFeeds(): FeedWithCounts[] {
         MAX(COALESCE(published_at, fetched_at)) AS latest_published_at
       FROM articles GROUP BY feed_id
     ) ac ON f.id = ac.feed_id
-    ORDER BY f.name COLLATE NOCASE
+    ORDER BY
+      CASE WHEN f.type = 'clip' THEN 1 ELSE 0 END,
+      CASE WHEN f.category_id IS NULL THEN 1 ELSE 0 END,
+      f.category_id,
+      f.sort_order ASC,
+      f.name COLLATE NOCASE ASC
   `).all() as FeedWithCounts[]
 }
 
@@ -66,18 +93,22 @@ export function createFeed(data: {
   rss_url?: string | null
   rss_bridge_url?: string | null
   category_id?: number | null
+  sort_order?: number
   requires_js_challenge?: number
   type?: 'rss' | 'clip'
 }): Feed {
+  const categoryId = data.category_id ?? null
+  const sortOrder = data.sort_order ?? getNextFeedSortOrder(categoryId)
   const info = runNamed(`
-    INSERT INTO feeds (name, url, rss_url, rss_bridge_url, category_id, requires_js_challenge, type)
-    VALUES (@name, @url, @rss_url, @rss_bridge_url, @category_id, @requires_js_challenge, @type)
+    INSERT INTO feeds (name, url, rss_url, rss_bridge_url, category_id, sort_order, requires_js_challenge, type)
+    VALUES (@name, @url, @rss_url, @rss_bridge_url, @category_id, @sort_order, @requires_js_challenge, @type)
   `, {
     name: data.name,
     url: data.url,
     rss_url: data.rss_url ?? null,
     rss_bridge_url: data.rss_bridge_url ?? null,
-    category_id: data.category_id ?? null,
+    category_id: categoryId,
+    sort_order: sortOrder,
     requires_js_challenge: data.requires_js_challenge ?? 0,
     type: data.type ?? 'rss',
   })
@@ -86,13 +117,14 @@ export function createFeed(data: {
 
 export function updateFeed(
   id: number,
-  data: { name?: string; rss_url?: string | null; rss_bridge_url?: string | null; disabled?: number; category_id?: number | null; requires_js_challenge?: number },
+  data: { name?: string; rss_url?: string | null; rss_bridge_url?: string | null; disabled?: number; category_id?: number | null; sort_order?: number; requires_js_challenge?: number },
 ): Feed | undefined {
   const feed = getFeedById(id)
   if (!feed) return undefined
 
   const fields: string[] = []
   const params: Record<string, unknown> = { id }
+  const categoryChanged = data.category_id !== undefined && data.category_id !== feed.category_id
 
   if (data.name !== undefined) {
     fields.push('name = @name')
@@ -118,6 +150,13 @@ export function updateFeed(
     fields.push('category_id = @category_id')
     params.category_id = data.category_id
   }
+  if (data.sort_order !== undefined) {
+    fields.push('sort_order = @sort_order')
+    params.sort_order = data.sort_order
+  } else if (categoryChanged) {
+    fields.push('sort_order = @sort_order')
+    params.sort_order = getNextFeedSortOrder(data.category_id ?? null, [id])
+  }
   if (data.requires_js_challenge !== undefined) {
     fields.push('requires_js_challenge = @requires_js_challenge')
     params.requires_js_challenge = data.requires_js_challenge
@@ -128,7 +167,7 @@ export function updateFeed(
   const updatedFeed = getDb().transaction(() => {
     runNamed(`UPDATE feeds SET ${fields.join(', ')} WHERE id = @id`, params)
 
-    if (data.category_id !== undefined) {
+    if (categoryChanged) {
       runNamed(`UPDATE articles SET category_id = @category_id WHERE feed_id = @id`, {
         category_id: data.category_id,
         id,
@@ -139,7 +178,7 @@ export function updateFeed(
   })()
 
   // Meilisearch sync outside transaction (external service, best-effort)
-  if (data.category_id !== undefined) {
+  if (categoryChanged) {
     const docs = getDb().prepare(`
       SELECT id, feed_id, category_id, title,
              COALESCE(full_text, '') AS full_text,
@@ -162,7 +201,11 @@ export function bulkMoveFeedsToCategory(feedIds: number[], categoryId: number | 
   if (feedIds.length === 0) return
   const placeholders = feedIds.map(() => '?').join(',')
   getDb().transaction(() => {
-    getDb().prepare(`UPDATE feeds SET category_id = ? WHERE id IN (${placeholders})`).run(categoryId, ...feedIds)
+    const nextSortOrder = getNextFeedSortOrder(categoryId, feedIds)
+    const updateFeedStmt = getDb().prepare('UPDATE feeds SET category_id = ?, sort_order = ? WHERE id = ?')
+    feedIds.forEach((feedId, index) => {
+      updateFeedStmt.run(categoryId, nextSortOrder + index, feedId)
+    })
     getDb().prepare(`UPDATE articles SET category_id = ? WHERE feed_id IN (${placeholders})`).run(categoryId, ...feedIds)
   })()
 
@@ -180,6 +223,44 @@ export function bulkMoveFeedsToCategory(feedIds: number[], categoryId: number | 
     FROM articles WHERE feed_id IN (${placeholders})
   `).all(...feedIds) as MeiliArticleDoc[]
   syncArticlesByFeedToSearch(allDocs)
+}
+
+export function reorderFeeds(feedIds: number[], categoryId: number | null): void {
+  if (feedIds.length === 0) return
+  const placeholders = feedIds.map(() => '?').join(',')
+  const feedRows = getDb().prepare(`SELECT id, category_id FROM feeds WHERE id IN (${placeholders})`).all(...feedIds) as Array<{ id: number; category_id: number | null }>
+  const movedFeedIds = feedRows
+    .filter(feed => feed.category_id !== categoryId)
+    .map(feed => feed.id)
+
+  getDb().transaction(() => {
+    const updateFeedStmt = getDb().prepare('UPDATE feeds SET category_id = ?, sort_order = ? WHERE id = ?')
+    feedIds.forEach((feedId, index) => {
+      updateFeedStmt.run(categoryId, index, feedId)
+    })
+
+    if (movedFeedIds.length > 0) {
+      const movedPlaceholders = movedFeedIds.map(() => '?').join(',')
+      getDb().prepare(`UPDATE articles SET category_id = ? WHERE feed_id IN (${movedPlaceholders})`).run(categoryId, ...movedFeedIds)
+    }
+  })()
+
+  if (movedFeedIds.length > 0) {
+    const movedPlaceholders = movedFeedIds.map(() => '?').join(',')
+    const docs = getDb().prepare(`
+      SELECT id, feed_id, category_id, title,
+             COALESCE(full_text, '') AS full_text,
+             COALESCE(full_text_translated, '') AS full_text_translated,
+             lang,
+             COALESCE(CAST(strftime('%s', published_at) AS INTEGER), 0) AS published_at,
+             COALESCE(score, 0) AS score,
+             (seen_at IS NULL) AS is_unread,
+             (liked_at IS NOT NULL) AS is_liked,
+             (bookmarked_at IS NOT NULL) AS is_bookmarked
+      FROM articles WHERE feed_id IN (${movedPlaceholders})
+    `).all(...movedFeedIds) as MeiliArticleDoc[]
+    syncArticlesByFeedToSearch(docs)
+  }
 }
 
 export function deleteFeed(id: number): boolean {

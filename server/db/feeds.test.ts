@@ -6,6 +6,7 @@ import {
   getFeedById,
   getFeeds,
   getEnabledFeeds,
+  reorderFeeds,
   insertArticle,
   markArticleSeen,
   createCategory,
@@ -129,6 +130,30 @@ describe('createFeed with all options', () => {
     expect(feed.category_id).toBe(cat.id)
     expect(feed.requires_js_challenge).toBe(1)
     expect(feed.type).toBe('rss')
+  })
+
+  it('assigns sort_order within a category', () => {
+    const cat = createCategory('Tech')
+    const first = createFeed({ name: 'First', url: 'https://first.example.com', category_id: cat.id })
+    const second = createFeed({ name: 'Second', url: 'https://second.example.com', category_id: cat.id })
+
+    expect(first.sort_order).toBe(0)
+    expect(second.sort_order).toBe(1)
+  })
+})
+
+describe('reorderFeeds', () => {
+  it('updates sort_order in the provided order', () => {
+    const first = seedFeed({ name: 'First', url: 'https://first.example.com' })
+    const second = seedFeed({ name: 'Second', url: 'https://second.example.com' })
+
+    reorderFeeds([second.id, first.id], null)
+
+    const feeds = getFeeds().filter(feed => feed.type === 'rss')
+    expect(feeds[0].id).toBe(second.id)
+    expect(feeds[1].id).toBe(first.id)
+    expect(getFeedById(second.id)!.sort_order).toBe(0)
+    expect(getFeedById(first.id)!.sort_order).toBe(1)
   })
 })
 

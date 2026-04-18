@@ -84,7 +84,18 @@ export function useFeedActions({
   async function handleMoveToCategory(feed: FeedWithCounts, categoryId: number | null) {
     const feedId = feed.id
     void mutateFeeds(
-      prev => prev ? { ...prev, feeds: prev.feeds.map(f => f.id === feedId ? { ...f, category_id: categoryId } : f) } : prev,
+      prev => {
+        if (!prev) return prev
+        const targetSortOrder = prev.feeds.filter(f => f.id !== feedId && f.category_id === categoryId && f.type !== 'clip').length
+        return {
+          ...prev,
+          feeds: prev.feeds.map(f =>
+            f.id === feedId
+              ? { ...f, category_id: categoryId, sort_order: targetSortOrder }
+              : f,
+          ),
+        }
+      },
       { revalidate: false },
     )
     try {

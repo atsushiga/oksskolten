@@ -5,6 +5,7 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
   markAllSeenByCategory,
 } from '../db.js'
 import { requireJson } from '../auth.js'
@@ -18,6 +19,10 @@ const UpdateCategoryBody = z.object({
   name: z.string().optional(),
   sort_order: z.number().optional(),
   collapsed: z.number().optional(),
+})
+
+const ReorderCategoriesBody = z.object({
+  category_ids: z.array(z.number()).min(1, 'category_ids must not be empty'),
 })
 
 export async function categoryRoutes(api: FastifyInstance): Promise<void> {
@@ -51,6 +56,17 @@ export async function categoryRoutes(api: FastifyInstance): Promise<void> {
         return
       }
       reply.send(category)
+    },
+  )
+
+  api.patch(
+    '/api/categories/reorder',
+    { preHandler: [requireJson] },
+    async (request, reply) => {
+      const body = parseOrBadRequest(ReorderCategoriesBody, request.body, reply)
+      if (!body) return
+      reorderCategories(body.category_ids)
+      reply.status(204).send()
     },
   )
 

@@ -40,7 +40,19 @@ export function useFeedBulkActions({
     if (toMove.length === 0) return
     const ids = toMove.map(f => f.id)
     void mutateFeeds(
-      prev => prev ? { ...prev, feeds: prev.feeds.map(f => ids.includes(f.id) ? { ...f, category_id: categoryId } : f) } : prev,
+      prev => {
+        if (!prev) return prev
+        const targetStartSortOrder = prev.feeds.filter(f => !ids.includes(f.id) && f.category_id === categoryId && f.type !== 'clip').length
+        const sortOrderById = new Map(ids.map((id, index) => [id, targetStartSortOrder + index]))
+        return {
+          ...prev,
+          feeds: prev.feeds.map(f =>
+            sortOrderById.has(f.id)
+              ? { ...f, category_id: categoryId, sort_order: sortOrderById.get(f.id)! }
+              : f,
+          ),
+        }
+      },
       { revalidate: false },
     )
     clearSelection()

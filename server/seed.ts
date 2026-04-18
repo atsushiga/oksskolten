@@ -67,14 +67,17 @@ export function seedDevData() {
     // Feeds — let DB auto-assign IDs, track seedId → dbId
     const feedIdMap = new Map<number, number>()
     const insertFeed = db.prepare(
-      'INSERT OR IGNORE INTO feeds (name, url, rss_url, rss_bridge_url, type, category_id, disabled, error_count, requires_js_challenge, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO feeds (name, url, rss_url, rss_bridge_url, type, category_id, sort_order, disabled, error_count, requires_js_challenge, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
+    const feedSortOrderByCategory = new Map<number | null, number>()
     for (const f of feedsJson) {
       f.created_at = resolveRelativeDate(f.created_at) ?? f.created_at
       const dbCatId = f.category_id ? (catIdMap.get(f.category_id) ?? null) : null
+      const sortOrder = feedSortOrderByCategory.get(dbCatId) ?? 0
+      feedSortOrderByCategory.set(dbCatId, sortOrder + 1)
       const result = insertFeed.run(
         f.name, f.url, f.rss_url ?? null, f.rss_bridge_url ?? null,
-        f.type, dbCatId, f.disabled, f.error_count,
+        f.type, dbCatId, sortOrder, f.disabled, f.error_count,
         f.requires_js_challenge, f.created_at
       )
       if (result.changes > 0) {

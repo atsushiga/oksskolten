@@ -50,6 +50,16 @@ export function deleteCategory(id: number): boolean {
   return result.changes > 0
 }
 
+export function reorderCategories(categoryIds: number[]): void {
+  if (categoryIds.length === 0) return
+  const stmt = getDb().prepare('UPDATE categories SET sort_order = ? WHERE id = ?')
+  getDb().transaction(() => {
+    categoryIds.forEach((categoryId, index) => {
+      stmt.run(index, categoryId)
+    })
+  })()
+}
+
 export function markAllSeenByCategory(categoryId: number): { updated: number } {
   const affectedIds = (getDb().prepare(
     'SELECT id FROM articles WHERE seen_at IS NULL AND category_id = ?',

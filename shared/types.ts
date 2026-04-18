@@ -16,6 +16,7 @@ export interface Feed {
   rss_url: string | null
   rss_bridge_url: string | null
   category_id: number | null
+  sort_order: number
   last_error: string | null
   error_count: number
   disabled: number
