@@ -1,5 +1,7 @@
 # Changelog
 
+## [v0.3.0](https://github.com/atsushiga/oksskolten/commits/v0.3.0) - 2026-04-18
+
 ## [v0.3.0](https://github.com/babarot/oksskolten/compare/v0.2.0...v0.3.0) - 2026-03-19
 ### New Features
 - Feature/keyboard navigation by @asonas in https://github.com/babarot/oksskolten/pull/12
